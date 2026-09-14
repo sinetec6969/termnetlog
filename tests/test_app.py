@@ -113,3 +113,30 @@ async def test_history_and_operator_screens(repo, tmp_path):
         await type_text(pilot, "w1")
         await pilot.pause()
         assert [s.operator.callsign for s in app.screen.summaries] == ["W1AW"]
+
+
+async def test_toggle_utc_local(repo, tmp_path):
+    from termnetlog import callsign
+    from termnetlog.tui import format as fmt
+
+    net = repo.create_net("Nightly 2m Net", "146.520", "FM", "2m", "KX9ABC", "ncs")
+    ci = repo.add_checkin(net.id, callsign.parse("W1AW"))
+    repo.conn.execute("UPDATE checkins SET time_utc = '2026-09-13T01:30:00Z' WHERE id = ?", (ci.id,))
+    app, _ = make_app(repo, tmp_path)
+    async with app.run_test(size=(140, 40)) as pilot:
+        app.open_net(net.id)
+        await pilot.pause()
+        table = app.screen.query_one(CheckinTable)
+        assert str(table.columns["time"].label) == "UTC"
+        assert table.get_cell(str(ci.id), "time") == "0130"
+
+        await pilot.press("ctrl+t")
+        await pilot.pause()
+        assert str(table.columns["time"].label) in ("EDT", "EST")  # heading follows today's offset
+        assert table.get_cell(str(ci.id), "time") == "2130"  # previous evening, UTC-4
+        assert fmt.date("2026-09-13T01:30:00Z") == "2026-09-12"
+        assert fmt.zone("2026-01-13T01:30:00Z") == "EST"
+
+        await pilot.press("ctrl+t")
+        await pilot.pause()
+        assert table.get_cell(str(ci.id), "time") == "0130"

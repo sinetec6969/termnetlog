@@ -5,6 +5,7 @@ from pathlib import Path
 
 from platformdirs import user_data_path
 from textual.app import App
+from textual.binding import Binding
 
 from termnetlog import export
 from termnetlog.config import APP, Config
@@ -12,12 +13,15 @@ from termnetlog.lookup.service import LookupService
 from termnetlog.models import CheckInRow, Net, from_iso
 from termnetlog.repo import Repo
 from termnetlog.tui.screens.net import NetScreen
+from termnetlog.tui import format as fmt
 from termnetlog.tui.screens.start import StartScreen
 
 
 class NetLogApp(App):
     TITLE = "termnetlog"
     CSS_PATH = "app.tcss"
+    # priority: works from the call entry box and the check-in list too.
+    BINDINGS = [Binding("ctrl+t", "toggle_tz", "UTC/local", priority=True)]
 
     def __init__(self, config: Config, repo: Repo, lookup: LookupService | None = None, export_dir: Path | None = None):
         super().__init__()
@@ -26,12 +30,20 @@ class NetLogApp(App):
         self.lookup = lookup or LookupService.from_config(repo, config)
         self.export_dir = export_dir or user_data_path(APP) / "exports"
         self._reported_errors: set[str] = set()
+        fmt.set_display_tz(config.local_tz, config.local_time)
 
     def on_mount(self) -> None:
         self.push_screen(StartScreen())
 
     async def on_unmount(self) -> None:
         await self.lookup.aclose()
+
+    def action_toggle_tz(self) -> None:
+        fmt.toggle_local()
+        # Screens that show times re-render fully on resume; lower screens catch up when they're resumed.
+        if hasattr(self.screen, "on_screen_resume"):
+            self.screen.on_screen_resume()
+        self.notify(f"Showing times in {fmt.zone_label()}", timeout=2)
 
     def open_net(self, net_id: int) -> None:
         # Keep the stack shallow: menu -> net.

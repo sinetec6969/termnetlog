@@ -33,7 +33,8 @@ class HistoryScreen(Screen):
 
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
-        table.add_columns("ID", "Date", "UTC", "Length", "Net", "Freq", "NCS", "Role", "Check-ins", "")
+        for label in ("ID", "Date", "Time", "Length", "Net", "Freq", "NCS", "Role", "Check-ins", ""):
+            table.add_column(label, key=label)
         self.reload()
         table.focus()
 
@@ -44,6 +45,7 @@ class HistoryScreen(Screen):
         table = self.query_one(DataTable)
         current = table.cursor_row
         table.clear()
+        table.columns["Time"].label = Text(fmt.zone_label())
         for net, count in self.app.repo.list_nets():
             table.add_row(
                 Text(str(net.id), justify="right"),

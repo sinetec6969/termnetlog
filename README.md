@@ -34,7 +34,10 @@ Flags: **t** traffic · **s** short time · **r** ragchew · **c** recognized ·
 `esc` jumps to the check-in list, where those same letters toggle flags on the selected row,
 `enter` edits the check-in note, `o` edits persistent operator notes, `e` edits operator details,
 `l` re-runs the lookup. Start typing a callsign to jump back to the entry line.
-`ctrl+e` export · `ctrl+g` net notes · `ctrl+x` end net · `ctrl+b` menu · `f1` help.
+`ctrl+e` export · `ctrl+g` net notes · `ctrl+x` end net · `ctrl+b` menu · `ctrl+t` UTC/Eastern times · `f1` help.
+
+`ctrl+t` only changes what's on screen; the database, text roster, and ADIF exports stay in UTC.
+Set `[display] local_tz` (default `America/New_York`) and `local_time = true` in the config to change the zone or start in local time.
 
 ## CLI
 

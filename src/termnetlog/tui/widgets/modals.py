@@ -248,6 +248,7 @@ Flag letters: **t** traffic · **s** short time · **r** ragchew · **c** recogn
 | **ctrl+g** | edit net notes |
 | **ctrl+x** | end net |
 | **ctrl+b** | back to menu |
+| **ctrl+t** | toggle times between UTC and local (Eastern by default) |
 | **f1** | this help |
 """
 

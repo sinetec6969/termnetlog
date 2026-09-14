@@ -36,6 +36,11 @@ password = ""
 [lookup]
 cache_days = 30         # re-lookup operators older than this
 hamdb = true            # use api.hamdb.org as a free fallback
+
+[display]
+# ctrl+t toggles displayed times between UTC and this zone. Logs and ADIF stay UTC.
+local_tz = "America/New_York"
+local_time = false      # start in local time instead of UTC
 """
 
 
@@ -57,6 +62,8 @@ class Config:
     qrz_password: str = ""
     cache_days: int = 30
     hamdb: bool = True
+    local_tz: str = "America/New_York"
+    local_time: bool = False
     db_path: Path = field(default_factory=lambda: default_db_path())
 
 
@@ -91,6 +98,7 @@ def load(path: Path | None = None, create: bool = True) -> Config:
     net = data.get("net", {})
     qrz = data.get("qrz", {})
     lookup = data.get("lookup", {})
+    display = data.get("display", {})
     defaults = NetDefaults()
     return Config(
         my_callsign=str(data.get("my_callsign", "")).upper(),
@@ -106,4 +114,6 @@ def load(path: Path | None = None, create: bool = True) -> Config:
         qrz_password=os.environ.get("QRZ_PASS") or str(qrz.get("password", "")),
         cache_days=int(lookup.get("cache_days", 30)),
         hamdb=bool(lookup.get("hamdb", True)),
+        local_tz=str(display.get("local_tz", "America/New_York")),
+        local_time=bool(display.get("local_time", False)),
     )

@@ -1,16 +1,54 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone, tzinfo
+from zoneinfo import ZoneInfo
 
 from termnetlog.models import from_iso, utcnow
+
+# Display timezone for the TUI. Storage and ADIF stay UTC; this only changes what's shown.
+_local_tz: tzinfo = ZoneInfo("America/New_York")
+_show_local = False
+
+
+def set_display_tz(local_tz: str, show_local: bool) -> None:
+    global _local_tz, _show_local
+    _local_tz = ZoneInfo(local_tz)
+    _show_local = show_local
+
+
+def toggle_local() -> bool:
+    global _show_local
+    _show_local = not _show_local
+    return _show_local
+
+
+def _tz() -> tzinfo:
+    return _local_tz if _show_local else timezone.utc
+
+
+def local(iso: str | datetime | None) -> datetime | None:
+    t = from_iso(iso) if isinstance(iso, str) or iso is None else iso
+    return t.astimezone(_tz()) if t else None
+
+
+def zone(iso: str | datetime | None = None) -> str:
+    """Suffix for a displayed time: 'Z' for UTC, else the zone abbreviation (EDT/EST) at that moment."""
+    if not _show_local:
+        return "Z"
+    return (local(iso) or datetime.now(_local_tz)).strftime("%Z")
+
+
+def zone_label() -> str:
+    """Column heading: 'UTC' or the current abbreviation."""
+    return zone() if _show_local else "UTC"
 
 
 def ago(iso: str | None, now: datetime | None = None) -> str:
     """Compact 'time since' label: today, 1d, 3w, 5mo, 2y."""
-    t = from_iso(iso)
+    t = local(iso)
     if t is None:
         return ""
-    now = now or utcnow()
+    now = local(now or utcnow())
     days = (now.date() - t.date()).days
     if days <= 0:
         return "today"
@@ -24,12 +62,12 @@ def ago(iso: str | None, now: datetime | None = None) -> str:
 
 
 def hhmm(iso: str | None) -> str:
-    t = from_iso(iso)
+    t = local(iso)
     return f"{t:%H%M}" if t else ""
 
 
 def date(iso: str | None) -> str:
-    t = from_iso(iso)
+    t = local(iso)
     return f"{t:%Y-%m-%d}" if t else ""
 
 

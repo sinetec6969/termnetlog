@@ -59,7 +59,7 @@ class CheckinTable(DataTable):
         self.cursor_type = "row"
         self.zebra_stripes = True
         self.add_column("#", key="seq", width=3)
-        self.add_column("UTC", key="time", width=4)
+        self.add_column(fmt.zone_label(), key="time", width=4)
         self.add_column("Call", key="call", width=10)
         self.add_column("Name", key="name", width=12)
         self.add_column("Location", key="location", width=18)
@@ -80,6 +80,7 @@ class CheckinTable(DataTable):
     def load(self, rows: list[CheckInRow], select_id: int | None = None) -> None:
         current = self.selected_id()
         self.clear()
+        self.columns["time"].label = Text(fmt.zone_label())
         for row in rows:
             ci, op = row.checkin, row.operator
             if row.is_new:

@@ -53,7 +53,7 @@ class StartScreen(Screen):
             count = len(repo.list_checkins(net.id))
             label = Text()
             label.append("▶ Resume ", style="bold green")
-            label.append(f"{net.name} — started {fmt.date(net.started_utc)} {fmt.hhmm(net.started_utc)}Z, {count} check-ins")
+            label.append(f"{net.name} — started {fmt.date(net.started_utc)} {fmt.hhmm(net.started_utc)}{fmt.zone(net.started_utc)}, {count} check-ins")
             menu.add_option(Option(label, id=f"resume:{net.id}"))
         menu.add_option(Option(Text("＋ New net  (n)", style="bold"), id="new"))
         menu.add_option(Option("📜 Past nets  (h)", id="history"))

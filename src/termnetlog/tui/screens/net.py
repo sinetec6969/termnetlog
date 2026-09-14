@@ -12,7 +12,7 @@ from textual.suggester import Suggester
 from textual.widgets import DataTable, Footer, Input, Label, Static
 
 from termnetlog import callsign, entry as entry_mod, export
-from termnetlog.models import CheckInRow, Net, from_iso, utcnow
+from termnetlog.models import CheckInRow, Net, utcnow
 from termnetlog.repo import DuplicateCheckIn, Repo
 from termnetlog.tui import format as fmt
 from termnetlog.tui.widgets.checkin_table import CallInput, CheckinTable
@@ -115,13 +115,12 @@ class NetScreen(Screen):
         if net.ncs_callsign:
             t.append(f"  NCS {net.ncs_callsign}")
         t.append(f"  [{'net control' if net.is_ncs else 'participant'}]", style="dim")
-        t.append(f"   {now:%H:%M:%S}Z", style="bold cyan")
+        t.append(f"   {fmt.local(now):%H:%M:%S}{fmt.zone(now)}", style="bold cyan")
         if net.is_open:
             t.append(f"   ⏱ {fmt.elapsed(net.started_utc)}")
         else:
-            ended = from_iso(net.ended_utc)
-            started = from_iso(net.started_utc)
-            t.append(f"   {started:%Y-%m-%d} ended {ended:%H:%M}Z ({fmt.elapsed(net.started_utc, net.ended_utc)})", style="yellow")
+            ended = fmt.local(net.ended_utc)
+            t.append(f"   {fmt.date(net.started_utc)} ended {ended:%H:%M}{fmt.zone(ended)} ({fmt.elapsed(net.started_utc, net.ended_utc)})", style="yellow")
         n = len(self.rows)
         t.append(f"   {n} check-in{'s' if n != 1 else ''}", style="bold")
         new = sum(1 for r in self.rows if r.is_new)

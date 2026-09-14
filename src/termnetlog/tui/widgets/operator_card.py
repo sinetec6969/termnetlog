@@ -79,7 +79,7 @@ class OperatorCard(VerticalScroll):
         if row:
             parts.append(Rule("this check-in", style="dim"))
             ci = row.checkin
-            line = Text(f"#{ci.seq} at {fmt.hhmm(ci.time_utc)}Z")
+            line = Text(f"#{ci.seq} at {fmt.hhmm(ci.time_utc)}{fmt.zone(ci.time_utc)}")
             words = flag_words(row)
             if words:
                 line.append(" · " + ", ".join(words), style="green")
