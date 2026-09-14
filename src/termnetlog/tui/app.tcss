@@ -1,0 +1,152 @@
+Screen {
+    layout: vertical;
+}
+
+#net-header {
+    height: 1;
+    background: $boost;
+    padding: 0 1;
+}
+
+#main {
+    height: 1fr;
+}
+
+#left {
+    width: 2fr;
+}
+
+#checkins, #operators, #nets {
+    height: 1fr;
+    overflow-x: hidden;
+}
+
+#ragchew {
+    height: auto;
+    min-height: 1;
+    padding: 0 1;
+    border-top: solid $primary-darken-2;
+}
+
+#card {
+    width: 1fr;
+    min-width: 34;
+    border-left: solid $primary-darken-2;
+    padding: 0 1;
+}
+
+#entry-bar {
+    height: 2;
+    border-top: solid $accent;
+}
+
+#entry-label {
+    width: auto;
+    padding: 0 1;
+    text-style: bold;
+    color: $accent;
+}
+
+#call-input {
+    width: 1fr;
+    border: none;
+    height: 1;
+    padding: 0;
+    background: $surface;
+}
+
+#call-input:focus {
+    background: $boost;
+}
+
+#suggest {
+    height: 1;
+    padding: 0 1;
+}
+
+#search {
+    margin: 0 0 1 0;
+}
+
+/* start screen */
+#start-box {
+    width: 72;
+    height: auto;
+    margin-top: 3;
+}
+
+#banner {
+    margin-bottom: 0;
+}
+
+#start-status {
+    margin: 1 0;
+}
+
+#start-menu {
+    height: auto;
+    max-height: 16;
+}
+
+/* dialogs */
+ModalScreen {
+    align: center middle;
+}
+
+.dialog {
+    width: 72;
+    height: auto;
+    max-height: 90%;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+.dialog.small {
+    width: 60;
+}
+
+.dialog.help {
+    width: 84;
+    height: 90%;
+}
+
+.dialog.help Markdown {
+    height: 1fr;
+    overflow-y: auto;
+}
+
+.dialog-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.dialog TextArea {
+    height: 10;
+}
+
+.form {
+    grid-size: 2;
+    grid-columns: 16 1fr;
+    grid-rows: auto;
+    height: auto;
+}
+
+.form Label {
+    padding: 1 0;
+}
+
+.hint {
+    color: $text-muted;
+    margin-top: 1;
+}
+
+.buttons {
+    height: auto;
+    margin-top: 1;
+    align-horizontal: right;
+}
+
+.buttons Button {
+    margin-left: 1;
+}

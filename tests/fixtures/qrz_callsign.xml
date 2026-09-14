@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<QRZDatabase version="1.34" xmlns="http://xmldata.qrz.com">
+  <Callsign>
+    <call>AA7BQ</call>
+    <fname>FRED L</fname>
+    <name>LLOYD</name>
+    <addr1>8711 E PINNACLE PEAK RD 159</addr1>
+    <addr2>SCOTTSDALE</addr2>
+    <state>AZ</state>
+    <zip>85014</zip>
+    <country>United States</country>
+    <grid>DM32af</grid>
+    <county>Maricopa</county>
+    <class>E</class>
+  </Callsign>
+  <Session>
+    <Key>abc123sessionkey</Key>
+    <Count>43</Count>
+    <GMTime>Sun Sep 13 01:00:01 2026</GMTime>
+  </Session>
+</QRZDatabase>
