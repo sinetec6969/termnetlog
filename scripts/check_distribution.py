@@ -20,6 +20,7 @@ import venv
 SMOKE = r'''
 import asyncio
 from importlib.resources import files
+from importlib.metadata import version
 from pathlib import Path
 import sys
 import tempfile
@@ -32,6 +33,7 @@ from termnetlog.tui.app import NetLogApp
 from termnetlog.tui.screens.net import NetScreen
 
 assert Path(termnetlog.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()), termnetlog.__file__
+assert version('termnetlog') == termnetlog.__version__
 assert files('termnetlog.tui').joinpath('app.tcss').read_text(encoding='utf-8').strip()
 
 async def main():

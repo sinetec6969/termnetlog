@@ -1,0 +1,42 @@
+{
+  "midnight-unicode-mobile.adi": [
+    {
+      "CALL": "K9XYZ/M",
+      "QSO_DATE": "20260921",
+      "TIME_ON": "235959",
+      "BAND": "2m",
+      "FREQ": "146.520",
+      "MODE": "FM",
+      "NAME": "Jose Synthetic",
+      "QTH": "Montreal",
+      "GRIDSQUARE": "FN31PR",
+      "STATION_CALLSIGN": "N0CALL"
+    },
+    {
+      "CALL": "K1ABC/P",
+      "QSO_DATE": "20260922",
+      "TIME_ON": "000001",
+      "BAND": "2m",
+      "FREQ": "146.520",
+      "MODE": "FM",
+      "NAME": "Jose Synthetic",
+      "QTH": "Montreal",
+      "GRIDSQUARE": "FN31PR",
+      "STATION_CALLSIGN": "N0CALL"
+    }
+  ],
+  "participant-contact.adi": [
+    {
+      "CALL": "W1AW",
+      "QSO_DATE": "20260921",
+      "TIME_ON": "235959",
+      "BAND": "2m",
+      "FREQ": "146.520",
+      "MODE": "FM",
+      "NAME": "Jose Synthetic",
+      "QTH": "Montreal",
+      "GRIDSQUARE": "FN31PR",
+      "STATION_CALLSIGN": "N0CALL"
+    }
+  ]
+}

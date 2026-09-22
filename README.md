@@ -44,6 +44,10 @@ and distribution channel. Passing automated tests does not replace operator tria
 
 ## Setup
 
+The **0.2.0b1 operator beta candidate** is being prepared under the [MIT license](LICENSE)
+for GitHub Releases; it has not been published. See [beta evidence](BETA_EVIDENCE.md)
+for completed checks and [remaining gates](BETA_CHECKLIST.md) before pilot use.
+
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'

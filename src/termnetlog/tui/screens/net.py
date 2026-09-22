@@ -271,6 +271,8 @@ class NetScreen(Screen):
         self.app.report_lookup_worker_state(event)
 
     def start_lookup(self, call: str, force: bool = False) -> None:
+        if not self.app.lookup.providers:
+            return
         if call in self.pending:
             return
         self.pending.add(call)

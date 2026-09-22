@@ -122,3 +122,27 @@ async def test_operator_dialog_scrolls_to_last_field_at_80x24(repo, tmp_path):
         field.value = 'Extra'
         await pilot.press('ctrl+s')
         assert repo.get_operator('W1AW').license_class == 'Extra'
+
+
+async def test_roster_refresh_updates_cells_and_reorders_without_stale_rows(repo, tmp_path):
+    first_net = net(repo)
+    first = repo.add_checkin(first_net.id, callsign.parse('W1AW'))
+    app = app_for(repo, tmp_path)
+    async with app.run_test(size=(100, 30)) as pilot:
+        app.open_net(first_net.id)
+        await pilot.pause()
+        table = app.screen.query_one(CheckinTable)
+        second = repo.add_checkin(first_net.id, callsign.parse('K9XYZ'))
+        app.screen.refresh_all(select_id=second.id)
+        assert table.row_count == 2
+        repo.update_operator('W1AW', first_name='Updated')
+        repo.toggle_flag(first.id, 'has_traffic')
+        app.screen.refresh_all()
+        assert table.get_cell(str(first.id), 'name') == 'Updated'
+        assert 'T' in str(table.get_cell(str(first.id), 'flags'))
+        repo.move_checkin(second.id, -1)
+        app.screen.refresh_all()
+        assert table.get_row_index(str(second.id)) == 0
+        repo.delete_checkin(second.id)
+        app.screen.refresh_all()
+        assert table.row_count == 1 and table.get_row_index(str(first.id)) == 0

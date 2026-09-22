@@ -147,8 +147,15 @@ The ninth change adds removal undo and an automated recovery drill:
   and against both installed package formats; package startup and dependency
   checks also pass. Release documentation is included in the source archive.
 
-Next: maintainer review, hosted CI, and the beta checklist. The core 0.1.1
-reliability changes are implemented locally; review and GitHub-hosted CI remain pending.
+Beta checklist follow-up: the maintainer selected MIT and GitHub Releases. Candidate
+0.2.0b1 metadata, draft-release workflow, release/support docs, installation/recovery
+evidence, dependency scan, live HamDB check, and large-history measurements are
+prepared on main. Entry redraw work reduced measured p95 from 149.50 ms to 63.04 ms.
+See [BETA_EVIDENCE.md](BETA_EVIDENCE.md) and the updated checklist for limitations
+and open physical-terminal, QRZ, logging-application, and second-device checks.
+
+Next: review beta preparation, verify its hosted CI, and finish the remaining checklist.
+The core reliability changes are implemented; no release has been published.
 The work is prepared on `release/ci-packaging` for review; no release has been published.
 
 ## Delivery order

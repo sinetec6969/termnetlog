@@ -1,3 +1,8 @@
 recursive-include tests *.py *.json *.xml *.txt
 include scripts/check_distribution.py
 include AUDIT.md RELEASE_PLAN.md BETA_CHECKLIST.md
+include LICENSE CHANGELOG.md CONTRIBUTING.md BETA_EVIDENCE.md
+include scripts/check_beta.py
+include scripts/check_clean_install.py
+recursive-include audit *.json
+recursive-include audit/adif-samples *.adi *.md

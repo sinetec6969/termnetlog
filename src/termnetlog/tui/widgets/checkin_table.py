@@ -84,7 +84,11 @@ class CheckinTable(DataTable):
 
     def load(self, rows: list[CheckInRow], select_id: int | None = None) -> None:
         current = self.selected_id()
-        self.clear()
+        existing = [key.value for key in self.rows]
+        incoming = [str(row.checkin.id) for row in rows]
+        # Appending a check-in or enriching a profile need not rebuild every row.
+        if existing != incoming[:len(existing)]:
+            self.clear()
         self.columns["time"].label = Text(fmt.zone_label())
         for row in rows:
             ci, op = row.checkin, row.operator
@@ -92,7 +96,7 @@ class CheckinTable(DataTable):
                 last = Text("NEW★", style="bold black on yellow")
             else:
                 last = Text(fmt.ago(row.prev_seen))
-            self.add_row(
+            cells = (
                 Text(str(ci.seq), justify="right"),
                 fmt.hhmm(ci.time_utc),
                 Text(ci.logged_as, style="bold"),
@@ -101,8 +105,14 @@ class CheckinTable(DataTable):
                 flag_cell(row),
                 Text(str(row.nth), justify="right"),
                 last,
-                key=str(ci.id),
             )
+            key = str(ci.id)
+            if key in self.rows:
+                for column, value in zip(self.columns, cells):
+                    if self.get_cell(key, column) != value:
+                        self.update_cell(key, column, value)
+            else:
+                self.add_row(*cells, key=key)
         target = select_id if select_id is not None else current
         if target is not None:
             self.select_id(target)

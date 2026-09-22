@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "termnetlog"
-version = "0.1.0"
+version = "0.2.0b1"
+license = {file = "LICENSE"}
 description = "Terminal net logger for amateur radio nets"
 requires-python = ">=3.11"
 dependencies = [

@@ -1,0 +1,73 @@
+{
+  "recorded_utc": "2026-09-22T18:33:26.085115+00:00",
+  "platform": "Linux-6.12.107+deb13-amd64-x86_64-with-glibc2.41",
+  "python": "3.13.5",
+  "sqlite": "3.46.1",
+  "cpu_count": 8,
+  "dependencies": {
+    "textual": "8.2.8",
+    "httpx": "0.28.1",
+    "platformdirs": "4.11.12",
+    "tzdata": "2026.4",
+    "tomlkit": "0.15.1"
+  },
+  "dataset": {
+    "historical_checkins": 100000,
+    "initial_active_checkins": 200
+  },
+  "limitations": "Synthetic data; temporary local filesystem; headless 100x30 render, not a physical terminal or second backup device.",
+  "cpu": "Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz",
+  "timings": {
+    "history_page": {
+      "samples": 30,
+      "p50_ms": 9.21,
+      "p95_ms": 9.83,
+      "max_ms": 9.99
+    },
+    "history_filter": {
+      "samples": 30,
+      "p50_ms": 2.36,
+      "p95_ms": 2.62,
+      "max_ms": 2.68
+    },
+    "active_roster": {
+      "samples": 30,
+      "p50_ms": 13.71,
+      "p95_ms": 14.45,
+      "max_ms": 14.5
+    },
+    "entry_to_headless_render": {
+      "samples": 30,
+      "p50_ms": 52.01,
+      "p95_ms": 63.04,
+      "max_ms": 88.88
+    }
+  },
+  "recovery": {
+    "all_tables_match": true,
+    "tables": {
+      "nets": {
+        "rows": 501,
+        "sha256": "66200a7f629bde29924739300df2fa934bb339da5ef0acf6deb69be9cb618f5b"
+      },
+      "operators": {
+        "rows": 230,
+        "sha256": "33530506590de5c92fc0663c01364b4382934e058bebde0ee04c4f2117cb7c06"
+      },
+      "checkins": {
+        "rows": 100230,
+        "sha256": "82a8e002b0a9d6a9b4e10c3b3a19be0cb71a16f69041b0e0df6d6fe584c315f4"
+      },
+      "lookup_attempts": {
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "seconds": 0.909
+  },
+  "database_bytes": 13148160,
+  "budgets_met": {
+    "entry_p95_under_100ms": true,
+    "history_p95_under_300ms": true
+  }
+}
