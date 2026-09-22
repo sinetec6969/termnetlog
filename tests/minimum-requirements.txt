@@ -1,0 +1,6 @@
+# Keep these direct runtime floors aligned with pyproject.toml.
+textual==0.80.0
+httpx==0.27.0
+platformdirs==4.0.0
+tzdata==2024.1
+tomlkit==0.13.0

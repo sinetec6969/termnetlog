@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from platformdirs import user_data_path
 from textual.app import App
 from textual.binding import Binding
+from textual.worker import Worker, WorkerState
 
-from termnetlog import export
+from termnetlog import export, export_files
 from termnetlog.config import APP, Config
 from termnetlog.lookup.service import LookupService
-from termnetlog.models import CheckInRow, Net, from_iso
+from termnetlog.models import CheckInRow, Net
 from termnetlog.repo import Repo
 from termnetlog.tui.screens.net import NetScreen
 from termnetlog.tui import format as fmt
@@ -30,6 +30,7 @@ class NetLogApp(App):
         self.lookup = lookup or LookupService.from_config(repo, config)
         self.export_dir = export_dir or user_data_path(APP) / "exports"
         self._reported_errors: set[str] = set()
+        self.removed_checkins = {}  # per-net, process-local undo stacks
         fmt.set_display_tz(config.local_tz, config.local_time)
 
     def on_mount(self) -> None:
@@ -38,12 +39,17 @@ class NetLogApp(App):
     async def on_unmount(self) -> None:
         await self.lookup.aclose()
 
+    def report_lookup_worker_state(self, event: Worker.StateChanged) -> None:
+        if event.worker.group == "lookup" and event.state == WorkerState.ERROR:
+            kind = type(event.worker.error).__name__
+            self.lookup_error(f"Lookup could not finish ({kind}); retry or check the database")
+
     def action_toggle_tz(self) -> None:
         fmt.toggle_local()
         # Screens that show times re-render fully on resume; lower screens catch up when they're resumed.
         if hasattr(self.screen, "on_screen_resume"):
             self.screen.on_screen_resume()
-        self.notify(f"Showing times in {fmt.zone_label()}", timeout=2)
+        self.notify(f"Showing times in {fmt.zone_name()}", timeout=2)
 
     def open_net(self, net_id: int) -> None:
         # Keep the stack shallow: menu -> net.
@@ -58,13 +64,21 @@ class NetLogApp(App):
         self._reported_errors.add(message)
         self.notify(message, title="Lookup failed", severity="warning", timeout=6)
 
-    def write_exports(self, net: Net, rows: list[CheckInRow]) -> list[Path]:
-        self.export_dir.mkdir(parents=True, exist_ok=True)
-        started = from_iso(net.started_utc)
-        slug = re.sub(r"[^a-z0-9]+", "-", net.name.lower()).strip("-") or "net"
-        base = self.export_dir / f"{started:%Y%m%d-%H%M}-{slug}"
-        txt = base.with_suffix(".txt")
-        adi = base.with_suffix(".adi")
-        txt.write_text(export.to_text(net, rows))
-        adi.write_text(export.to_adif(net, rows, self.config.my_callsign))
-        return [txt, adi]
+    def write_exports(self, net: Net, rows: list[CheckInRow], *,
+                      warnings: list[str] | None = None) -> list[Path]:
+        return export_files.write_bundle(self.export_dir, net, rows, self.config.my_callsign, warnings=warnings)
+
+    def export_net(self, net: Net, rows: list[CheckInRow]) -> None:
+        warnings: list[str] = []
+        try:
+            paths = self.write_exports(net, rows, warnings=warnings)
+        except (OSError, ValueError) as error:
+            self.notify(str(error), title="Export failed", severity="error", timeout=10)
+            return
+        self.notify("\n".join(str(path) for path in paths), title="Exported", timeout=10)
+        for warning in warnings:
+            self.notify(warning, title="ADIF text conversion", severity="warning", timeout=10)
+        try:
+            self.copy_to_clipboard(export.to_text(net, rows))
+        except Exception:
+            self.notify("Files saved; clipboard copy failed", severity="warning")

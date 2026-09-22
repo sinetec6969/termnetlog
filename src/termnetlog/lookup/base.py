@@ -51,5 +51,7 @@ class Provider(Protocol):
 def clean(value: str | None) -> str | None:
     if value is None:
         return None
+    if not isinstance(value, str):
+        raise LookupFailed("Lookup response contains a non-text field")
     value = " ".join(value.split())
     return value or None

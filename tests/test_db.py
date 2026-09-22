@@ -1,8 +1,61 @@
 import pytest
+import sqlite3
 
 from termnetlog import callsign, db
 from termnetlog.lookup.base import LookupResult
 from termnetlog.repo import DuplicateCheckIn
+
+
+def test_upgrade_v1_keeps_operator_data(tmp_path):
+    path = tmp_path / 'old.db'
+    conn = sqlite3.connect(path)
+    conn.executescript(db.MIGRATIONS[0] + '\nPRAGMA user_version = 1;')
+    conn.execute("INSERT INTO operators (callsign, name, operator_notes, created_at) VALUES (?, ?, ?, ?)",
+                 ('W1AW', 'Known Name', 'Keep my notes', '2020-01-01T00:00:00Z'))
+    conn.commit()
+    conn.close()
+    conn = db.connect(path)
+    try:
+        row = conn.execute('SELECT * FROM operators').fetchone()
+        assert (row['name'], row['operator_notes']) == ('Known Name', 'Keep my notes')
+        assert conn.execute('SELECT COUNT(*) FROM lookup_attempts').fetchone()[0] == 0
+        assert conn.execute('PRAGMA user_version').fetchone()[0] == len(db.MIGRATIONS)
+    finally:
+        conn.close()
+
+
+def test_future_database_schema_is_rejected(repo):
+    repo.conn.execute('PRAGMA user_version = 999')
+    with pytest.raises(ValueError, match='requires a newer'):
+        db.migrate(repo.conn)
+
+
+def test_failed_migration_preserves_schema_version_and_data(repo, monkeypatch):
+    repo.update_operator('W1AW', name='Existing operator')
+    previous = repo.conn.execute('PRAGMA user_version').fetchone()[0]
+    monkeypatch.setattr(db, 'MIGRATIONS', db.MIGRATIONS + [
+        'CREATE TABLE migration_probe (id INTEGER); INSERT INTO nonexistent_table VALUES (1);'
+    ])
+    with pytest.raises(sqlite3.OperationalError):
+        db.migrate(repo.conn)
+    assert repo.conn.execute('PRAGMA user_version').fetchone()[0] == previous
+    assert repo.conn.execute("SELECT name FROM sqlite_master WHERE name = 'migration_probe'").fetchone() is None
+    assert repo.get_operator('W1AW').name == 'Existing operator'
+    assert not repo.conn.in_transaction
+
+
+def test_history_uses_id_to_break_timestamp_ties(repo):
+    first, second = make_net(repo), make_net(repo)
+    a = repo.add_checkin(first.id, callsign.parse('W1AW'))
+    b = repo.add_checkin(second.id, callsign.parse('W1AW'))
+    repo.conn.execute("UPDATE checkins SET time_utc = '2026-09-22T01:00:00Z'")
+    repo.conn.commit()
+    first_row = repo.list_checkins(first.id)[0]
+    second_row = repo.list_checkins(second.id)[0]
+    assert first_row.nth == 1 and first_row.prev_seen is None
+    assert second_row.nth == 2 and second_row.prev_seen == '2026-09-22T01:00:00Z'
+    assert not second_row.is_new
+    assert [ci.id for ci, _ in repo.operator_history('W1AW')] == [b.id, a.id]
 
 
 def make_net(repo, **kw):

@@ -18,7 +18,7 @@ Screen {
 
 #checkins, #operators, #nets {
     height: 1fr;
-    overflow-x: hidden;
+    overflow-x: auto;
 }
 
 #ragchew {
@@ -97,9 +97,15 @@ ModalScreen {
     width: 72;
     height: auto;
     max-height: 90%;
+    max-width: 100%;
+    overflow-y: auto;
     border: thick $accent;
     background: $surface;
     padding: 1 2;
+}
+
+#history-page {
+    height: 1;
 }
 
 .dialog.small {

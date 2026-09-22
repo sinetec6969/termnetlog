@@ -1,0 +1,3 @@
+recursive-include tests *.py *.json *.xml *.txt
+include scripts/check_distribution.py
+include AUDIT.md RELEASE_PLAN.md BETA_CHECKLIST.md

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from termnetlog import __version__
+from termnetlog import __version__, adif
 from termnetlog.models import CheckInRow, Net, from_iso
 
 FLAG_LABELS = {
@@ -23,43 +23,56 @@ def flag_words(row: CheckInRow) -> list[str]:
     return words
 
 
-def _adif_field(name: str, value: str | None) -> str:
+def _adif_field(name: str, value: str | None, warnings: list[str] | None = None) -> str:
     if value is None or value == "":
         return ""
-    value = str(value)
+    value = adif.ascii_text(str(value), name, warnings)
+    if not value:
+        return ""
     return f"<{name}:{len(value)}>{value} "
 
 
-def to_adif(net: Net, rows: list[CheckInRow], station_callsign: str = "") -> str:
-    started = from_iso(net.started_utc)
+def to_adif(net: Net, rows: list[CheckInRow], station_callsign: str = "", *,
+            warnings: list[str] | None = None) -> str:
+    """Render validated ADI; report lossy free-text conversion in warnings."""
+    started = adif.timestamp(net.started_utc, 'Net start')
+    band, frequency, mode, submode = adif.radio_fields(net.band, net.frequency, net.mode)
+    station_callsign = adif.call(station_callsign, 'STATION_CALLSIGN', optional=True)
+    def field(name: str, value: str | None) -> str:
+        return _adif_field(name, value, warnings)
+
     header = (
-        f"termnetlog export: {net.name} {started:%Y-%m-%d %H:%MZ}\n"
+        f"termnetlog export: net {net.id} {started:%Y-%m-%d %H:%MZ}\n"
         f"{_adif_field('ADIF_VER', '3.1.4')}{_adif_field('PROGRAMID', 'termnetlog')}"
         f"{_adif_field('PROGRAMVERSION', __version__)}\n<EOH>\n"
     )
     records = []
     for row in rows:
         ci, op = row.checkin, row.operator
-        t = from_iso(ci.time_utc)
+        t = adif.timestamp(ci.time_utc, f'Check-in #{ci.seq} time')
+        call = adif.call(ci.logged_as, f'Check-in #{ci.seq} CALL')
+        grid, grid_ext = adif.grid(op.grid, f'{call} GRIDSQUARE')
         comment_parts = [f"{net.name}"] + flag_words(row)
         if ci.notes:
             comment_parts.append(ci.notes.replace("\n", " "))
         rec = "".join(
             [
-                _adif_field("CALL", ci.logged_as),
-                _adif_field("QSO_DATE", f"{t:%Y%m%d}"),
-                _adif_field("TIME_ON", f"{t:%H%M%S}"),
-                _adif_field("BAND", net.band.lower()),
-                _adif_field("FREQ", net.frequency),
-                _adif_field("MODE", net.mode),
-                _adif_field("NAME", op.full_name),
-                _adif_field("QTH", op.city),
-                _adif_field("STATE", op.state),
-                _adif_field("CNTY", f"{op.state},{op.county}" if op.state and op.county else None),
-                _adif_field("COUNTRY", op.country),
-                _adif_field("GRIDSQUARE", op.grid),
-                _adif_field("STATION_CALLSIGN", station_callsign or None),
-                _adif_field("COMMENT", "; ".join(comment_parts)),
+                field("CALL", call),
+                field("QSO_DATE", f"{t:%Y%m%d}"),
+                field("TIME_ON", f"{t:%H%M%S}"),
+                field("BAND", band),
+                field("FREQ", frequency),
+                field("MODE", mode),
+                field("SUBMODE", submode),
+                field("NAME", op.full_name),
+                field("QTH", op.city),
+                field("STATE", op.state),
+                field("CNTY", f"{op.state},{op.county}" if op.state and op.county else None),
+                field("COUNTRY", op.country),
+                field("GRIDSQUARE", grid),
+                field("GRIDSQUARE_EXT", grid_ext),
+                field("STATION_CALLSIGN", station_callsign or None),
+                field("COMMENT", "; ".join(comment_parts)),
             ]
         )
         records.append(rec + "<EOR>")

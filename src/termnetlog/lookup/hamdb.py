@@ -11,21 +11,29 @@ URL = "https://api.hamdb.org/v1/{call}/json/{agent}"
 
 
 def parse(data: dict) -> LookupResult | None:
-    try:
-        body = data["hamdb"]
-    except (KeyError, TypeError) as e:
-        raise LookupFailed("HamDB: unexpected response") from e
-    status = (body.get("messages") or {}).get("status", "")
-    cs = body.get("callsign") or {}
-    if status != "OK" or cs.get("call") in (None, "", "NOT_FOUND"):
+    body = data.get("hamdb") if isinstance(data, dict) else None
+    if not isinstance(body, dict) or not isinstance(body.get("messages"), dict):
+        raise LookupFailed("HamDB: unexpected response")
+    status = body["messages"].get("status")
+    if status == "NOT_FOUND":
         return None
+    if status != "OK":
+        raise LookupFailed("HamDB: service returned an unsuccessful status")
+    cs = body.get("callsign")
+    if not isinstance(cs, dict):
+        raise LookupFailed("HamDB: unexpected callsign record")
+    call = clean(cs.get("call"))
+    if call == "NOT_FOUND":
+        return None
+    if not call:
+        raise LookupFailed("HamDB: missing callsign")
 
     fname = tidy_case(clean(cs.get("fname")))
     lname = tidy_case(clean(cs.get("name")))
     full = " ".join(p for p in (fname, clean(cs.get("mi")), lname) if p) or None
     cls = clean(cs.get("class"))
     return LookupResult(
-        callsign=cs["call"].upper(),
+        callsign=call.upper(),
         source="hamdb",
         first_name=fname.split()[0] if fname else None,
         name=full,
@@ -54,8 +62,10 @@ class HamDBProvider:
             resp = await self.client.get(URL.format(call=callsign.lower(), agent=AGENT))
             resp.raise_for_status()
             data = resp.json()
+        except httpx.HTTPStatusError as e:
+            raise LookupFailed(f"HamDB: HTTP {e.response.status_code}") from None
         except (httpx.HTTPError, ValueError) as e:
-            raise LookupFailed(f"HamDB: {e}") from e
+            raise LookupFailed(f"HamDB: invalid response or network failure ({type(e).__name__})") from None
         return parse(data)
 
     async def aclose(self) -> None:

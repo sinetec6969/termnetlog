@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone, tzinfo
-from zoneinfo import ZoneInfo
 
+from termnetlog.config import display_timezone
 from termnetlog.models import from_iso, utcnow
 
 # Display timezone for the TUI. Storage and ADIF stay UTC; this only changes what's shown.
-_local_tz: tzinfo = ZoneInfo("America/New_York")
+_local_tz: tzinfo = timezone.utc
+_local_name = 'UTC'
 _show_local = False
 
 
 def set_display_tz(local_tz: str, show_local: bool) -> None:
-    global _local_tz, _show_local
-    _local_tz = ZoneInfo(local_tz)
+    global _local_tz, _local_name, _show_local
+    _local_tz = display_timezone(local_tz)
+    _local_name = local_tz
     _show_local = show_local
 
 
@@ -39,8 +41,12 @@ def zone(iso: str | datetime | None = None) -> str:
 
 
 def zone_label() -> str:
-    """Column heading: 'UTC' or the current abbreviation."""
-    return zone() if _show_local else "UTC"
+    """A stable heading; today's DST abbreviation may be wrong for old rows."""
+    return "Local" if _show_local else "UTC"
+
+
+def zone_name() -> str:
+    return _local_name if _show_local else 'UTC'
 
 
 def ago(iso: str | None, now: datetime | None = None) -> str:

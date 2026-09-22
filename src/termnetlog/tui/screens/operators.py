@@ -8,6 +8,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Input, Static
+from textual.worker import Worker
 
 from termnetlog.repo import OperatorSummary
 from termnetlog.tui import format as fmt
@@ -154,7 +155,10 @@ class OperatorsScreen(Screen):
         if s.operator.lookup_source == "manual":
             self.notify(f"{call} was edited by hand; lookup skipped", severity="warning")
             return
-        self.run_worker(self._relookup(call), group="lookup")
+        self.run_worker(self._relookup(call), group="lookup", exit_on_error=False)
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        self.app.report_lookup_worker_state(event)
 
     async def _relookup(self, call: str) -> None:
         outcome = await self.app.lookup.resolve(call, force=True)
@@ -162,6 +166,7 @@ class OperatorsScreen(Screen):
             self.app.lookup_error(err)
         if outcome.updated:
             self.notify(f"{call}: updated from {outcome.operator.lookup_source}")
-        elif not outcome.errors:
+        elif not outcome.found and not outcome.errors:
             self.notify(f"{call}: not found", severity="warning")
-        self.reload()
+        if self.is_mounted:
+            self.reload()

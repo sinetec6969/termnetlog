@@ -54,15 +54,20 @@ class CheckinTable(DataTable):
         Binding("escape", "screen.focus_entry", "Entry", show=False),
     ]
     BOUND_CHARS = set("tcrsmpoelv")
+    compact = False
 
     def on_mount(self) -> None:
         self.cursor_type = "row"
         self.zebra_stripes = True
+        self.build_columns()
+
+    def build_columns(self) -> None:
         self.add_column("#", key="seq", width=3)
-        self.add_column(fmt.zone_label(), key="time", width=4)
+        self.add_column(fmt.zone_label(), key="time", width=5)
         self.add_column("Call", key="call", width=10)
         self.add_column("Name", key="name", width=12)
-        self.add_column("Location", key="location", width=18)
+        if not self.compact:
+            self.add_column("Location", key="location", width=18)
         self.add_column("Flags", key="flags", width=10)
         self.add_column("Nets", key="nth", width=4)
         self.add_column("Last", key="last", width=6)
@@ -92,7 +97,7 @@ class CheckinTable(DataTable):
                 fmt.hhmm(ci.time_utc),
                 Text(ci.logged_as, style="bold"),
                 op.display_name,
-                op.location,
+                *([] if self.compact else [op.location]),
                 flag_cell(row),
                 Text(str(row.nth), justify="right"),
                 last,

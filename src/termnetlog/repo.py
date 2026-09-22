@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 from termnetlog.callsign import ParsedCall
+from termnetlog.entry import Entry
 from termnetlog.lookup.base import LookupResult
 from termnetlog.models import FLAGS, CheckIn, CheckInRow, Net, Operator, to_iso, utcnow
 
@@ -50,7 +51,8 @@ class Repo:
         op = self.ensure_operator(result.callsign)
         if op.lookup_source == "manual":
             return op
-        cols = ", ".join(f"{f} = ?" for f in OPERATOR_DATA_FIELDS)
+        # Missing provider fields are not instructions to erase known data.
+        cols = ", ".join(f"{f} = COALESCE(NULLIF(?, ''), {f})" for f in OPERATOR_DATA_FIELDS)
         values = [getattr(result, f) for f in OPERATOR_DATA_FIELDS]
         with self.conn:
             self.conn.execute(
@@ -59,11 +61,27 @@ class Repo:
             )
         return self.get_operator(result.callsign)  # type: ignore[return-value]
 
+    def lookup_attempt(self, callsign: str) -> tuple[str, str] | None:
+        row = self.conn.execute(
+            "SELECT attempted_at, status FROM lookup_attempts WHERE callsign = ?", (callsign,)
+        ).fetchone()
+        return (row["attempted_at"], row["status"]) if row else None
+
+    def record_lookup_attempt(self, callsign: str, status: str) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO lookup_attempts (callsign, attempted_at, status) VALUES (?, ?, ?)"
+                " ON CONFLICT(callsign) DO UPDATE SET attempted_at = excluded.attempted_at,"
+                " status = excluded.status",
+                (callsign, to_iso(utcnow()), status),
+            )
+
     def mark_looked_up(self, callsign: str, source: str) -> None:
         """Record a lookup attempt that found nothing, so we don't retry every time."""
         with self.conn:
             self.conn.execute(
-                "UPDATE operators SET lookup_at = ?, lookup_source = COALESCE(lookup_source, ?)"
+                "UPDATE operators SET lookup_at = CASE WHEN lookup_source IS NULL OR lookup_source = 'none'"
+                " THEN ? ELSE lookup_at END, lookup_source = COALESCE(lookup_source, ?)"
                 " WHERE callsign = ? AND COALESCE(lookup_source, '') != 'manual'",
                 (to_iso(utcnow()), source, callsign),
             )
@@ -147,7 +165,7 @@ class Repo:
                    n.band AS n_band, n.started_utc AS n_started_utc, n.ended_utc AS n_ended_utc,
                    n.ncs_callsign AS n_ncs_callsign, n.my_role AS n_my_role, n.notes AS n_notes
             FROM checkins c JOIN nets n ON n.id = c.net_id
-            WHERE c.callsign = ? ORDER BY c.time_utc DESC LIMIT ?
+            WHERE c.callsign = ? ORDER BY c.time_utc DESC, c.id DESC LIMIT ?
             """,
             (callsign, limit),
         ).fetchall()
@@ -160,13 +178,13 @@ class Repo:
     # ---- nets --------------------------------------------------------------
 
     def create_net(
-        self, name: str, frequency: str, mode: str, band: str, ncs_callsign: str, my_role: str
+        self, name: str, frequency: str, mode: str, band: str, ncs_callsign: str, my_role: str, notes: str = ""
     ) -> Net:
         with self.conn:
             cur = self.conn.execute(
-                "INSERT INTO nets (name, frequency, mode, band, started_utc, ncs_callsign, my_role)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (name, frequency, mode, band, to_iso(utcnow()), ncs_callsign.upper(), my_role),
+                "INSERT INTO nets (name, frequency, mode, band, started_utc, ncs_callsign, my_role, notes)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (name, frequency, mode, band, to_iso(utcnow()), ncs_callsign.upper(), my_role, notes),
             )
         return self.get_net(cur.lastrowid)  # type: ignore[arg-type,return-value]
 
@@ -174,14 +192,21 @@ class Repo:
         row = self.conn.execute("SELECT * FROM nets WHERE id = ?", (net_id,)).fetchone()
         return Net.from_row(row) if row else None
 
-    def list_nets(self, limit: int = 200) -> list[tuple[Net, int]]:
+    def count_nets(self, search: str = "") -> int:
+        return self.conn.execute(
+            "SELECT COUNT(*) FROM nets WHERE instr(lower(name), lower(?)) > 0 OR instr(substr(started_utc, 1, 10), ?) > 0",
+            (search, search),
+        ).fetchone()[0]
+
+    def list_nets(self, limit: int = 200, *, offset: int = 0, search: str = "") -> list[tuple[Net, int]]:
         rows = self.conn.execute(
             """
             SELECT n.*, COUNT(c.id) AS checkin_count FROM nets n
             LEFT JOIN checkins c ON c.net_id = n.id
-            GROUP BY n.id ORDER BY n.started_utc DESC, n.id DESC LIMIT ?
+            WHERE instr(lower(n.name), lower(?)) > 0 OR instr(substr(n.started_utc, 1, 10), ?) > 0
+            GROUP BY n.id ORDER BY n.started_utc DESC, n.id DESC LIMIT ? OFFSET ?
             """,
-            (limit,),
+            (search, search, limit, offset),
         ).fetchall()
         return [(Net.from_row(r), r["checkin_count"]) for r in rows]
 
@@ -218,22 +243,75 @@ class Repo:
     # ---- check-ins ---------------------------------------------------------
 
     def add_checkin(self, net_id: int, call: ParsedCall, relayed_by: str = "") -> CheckIn:
-        existing = self.conn.execute(
-            "SELECT * FROM checkins WHERE net_id = ? AND callsign = ?", (net_id, call.base)
-        ).fetchone()
-        if existing:
-            raise DuplicateCheckIn(CheckIn.from_row(existing))
-        self.ensure_operator(call.base)
-        with self.conn:
+        return self.record_entry(net_id, Entry(call=call, relayed_by=relayed_by))
+
+    def record_entry(self, net_id: int, entry: Entry) -> CheckIn:
+        """Save an entire entry, without committing any enclosing transaction."""
+        flags = set(entry.flags)
+        if flags - set(FLAGS):
+            raise ValueError("Unknown check-in flag")
+        call = entry.call
+        flags.update(flag for flag in ('mobile', 'portable') if getattr(call, flag))
+        self.conn.execute("SAVEPOINT record_entry")
+        try:
+            # This write acquires the writer lock before sequence allocation.
+            # Do not call helpers that commit independently inside this savepoint.
+            self.conn.execute(
+                "INSERT OR IGNORE INTO operators (callsign, created_at) VALUES (?, ?)",
+                (call.base, to_iso(utcnow())),
+            )
+            existing = self.conn.execute(
+                "SELECT * FROM checkins WHERE net_id = ? AND callsign = ?", (net_id, call.base)
+            ).fetchone()
+            if existing:
+                raise DuplicateCheckIn(CheckIn.from_row(existing))
             seq = self.conn.execute(
                 "SELECT COALESCE(MAX(seq), 0) + 1 FROM checkins WHERE net_id = ?", (net_id,)
             ).fetchone()[0]
             cur = self.conn.execute(
-                "INSERT INTO checkins (net_id, callsign, logged_as, seq, time_utc, mobile, portable, relayed_by)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (net_id, call.base, call.raw, seq, to_iso(utcnow()), int(call.mobile), int(call.portable), relayed_by),
+                "INSERT INTO checkins (net_id, callsign, logged_as, seq, time_utc,"
+                " mobile, portable, has_traffic, short_time, recognized, ragchew, relayed_by, notes)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (net_id, call.base, call.raw, seq, to_iso(utcnow()),
+                 *(int(flag in flags) for flag in FLAGS), entry.relayed_by, entry.note),
             )
-        return self.get_checkin(cur.lastrowid)  # type: ignore[arg-type,return-value]
+            result = self.get_checkin(cur.lastrowid)
+            assert result is not None
+            self.conn.execute("RELEASE SAVEPOINT record_entry")
+            return result
+        except BaseException:
+            # Some SQLite failures roll back the entire transaction themselves.
+            if self.conn.in_transaction:
+                self.conn.execute("ROLLBACK TO SAVEPOINT record_entry")
+                self.conn.execute("RELEASE SAVEPOINT record_entry")
+            raise
+
+    def correct_callsign(self, checkin_id: int, call: ParsedCall) -> CheckIn:
+        """Change only one check-in's identity; never move operator profiles/notes."""
+        self.conn.execute('SAVEPOINT correct_callsign')
+        try:
+            self.conn.execute('INSERT OR IGNORE INTO operators (callsign, created_at) VALUES (?, ?)',
+                              (call.base, to_iso(utcnow())))
+            current = self.get_checkin(checkin_id)
+            if current is None:
+                raise ValueError('Check-in no longer exists')
+            duplicate = self.conn.execute(
+                'SELECT * FROM checkins WHERE net_id=? AND callsign=? AND id!=?',
+                (current.net_id, call.base, checkin_id),
+            ).fetchone()
+            if duplicate:
+                raise DuplicateCheckIn(CheckIn.from_row(duplicate))
+            self.conn.execute('UPDATE checkins SET callsign=?, logged_as=? WHERE id=?',
+                              (call.base, call.raw, checkin_id))
+            result = self.get_checkin(checkin_id)
+            assert result is not None
+            self.conn.execute('RELEASE SAVEPOINT correct_callsign')
+            return result
+        except BaseException:
+            if self.conn.in_transaction:
+                self.conn.execute('ROLLBACK TO SAVEPOINT correct_callsign')
+                self.conn.execute('RELEASE SAVEPOINT correct_callsign')
+            raise
 
     def get_checkin(self, checkin_id: int) -> CheckIn | None:
         row = self.conn.execute("SELECT * FROM checkins WHERE id = ?", (checkin_id,)).fetchone()
@@ -250,10 +328,12 @@ class Repo:
                    o.operator_notes AS o_operator_notes, o.created_at AS o_created_at,
                    (SELECT COUNT(*) FROM checkins c2
                      WHERE c2.callsign = c.callsign
-                       AND (c2.time_utc < c.time_utc OR c2.id = c.id)) AS nth,
+                       AND (c2.time_utc < c.time_utc
+                            OR (c2.time_utc = c.time_utc AND c2.id <= c.id))) AS nth,
                    (SELECT MAX(c2.time_utc) FROM checkins c2
                      WHERE c2.callsign = c.callsign AND c2.net_id != c.net_id
-                       AND c2.time_utc < c.time_utc) AS prev_seen
+                       AND (c2.time_utc < c.time_utc
+                            OR (c2.time_utc = c.time_utc AND c2.id < c.id))) AS prev_seen
             FROM checkins c JOIN operators o ON o.callsign = c.callsign
             WHERE c.net_id = ? ORDER BY c.seq
             """,
@@ -292,15 +372,57 @@ class Repo:
                 "UPDATE checkins SET relayed_by = ? WHERE id = ?", (relayed_by.strip().upper(), checkin_id)
             )
 
-    def delete_checkin(self, checkin_id: int) -> None:
-        ci = self.get_checkin(checkin_id)
-        if ci is None:
-            return
-        with self.conn:
+    def delete_checkin(self, checkin_id: int) -> CheckIn | None:
+        self.conn.execute('SAVEPOINT remove_checkin')
+        try:
+            # Acquire the writer lock before capturing the undo record.
+            self.conn.execute('UPDATE checkins SET id=id WHERE id=?', (checkin_id,))
+            ci = self.get_checkin(checkin_id)
+            if ci is None:
+                self.conn.execute('RELEASE SAVEPOINT remove_checkin')
+                return None
             self.conn.execute("DELETE FROM checkins WHERE id = ?", (checkin_id,))
             self.conn.execute(
                 "UPDATE checkins SET seq = seq - 1 WHERE net_id = ? AND seq > ?", (ci.net_id, ci.seq)
             )
+            self.conn.execute('RELEASE SAVEPOINT remove_checkin')
+            return ci
+        except BaseException:
+            if self.conn.in_transaction:
+                self.conn.execute('ROLLBACK TO SAVEPOINT remove_checkin')
+                self.conn.execute('RELEASE SAVEPOINT remove_checkin')
+            raise
+
+    def restore_checkin(self, removed: CheckIn) -> CheckIn:
+        """Restore a removed entry at its old position without replacing any record."""
+        self.conn.execute('SAVEPOINT restore_checkin')
+        try:
+            self.conn.execute('UPDATE nets SET id=id WHERE id=?', (removed.net_id,))
+            duplicate = self.conn.execute('SELECT * FROM checkins WHERE net_id=? AND callsign=?',
+                                          (removed.net_id, removed.callsign)).fetchone()
+            if duplicate:
+                raise DuplicateCheckIn(CheckIn.from_row(duplicate))
+            count = self.conn.execute('SELECT COUNT(*) FROM checkins WHERE net_id=?', (removed.net_id,)).fetchone()[0]
+            values = asdict(removed)
+            values['seq'] = min(max(1, removed.seq), count + 1)
+            # SQLite may reuse the last deleted row ID for a later check-in.
+            if self.get_checkin(removed.id) is not None:
+                del values['id']
+            self.conn.execute('UPDATE checkins SET seq=seq+1 WHERE net_id=? AND seq>=?',
+                              (removed.net_id, values['seq']))
+            cur = self.conn.execute(
+                f"INSERT INTO checkins ({', '.join(values)}) VALUES ({', '.join('?' for _ in values)})",
+                tuple(values.values()),
+            )
+            result = self.get_checkin(cur.lastrowid)
+            assert result is not None
+            self.conn.execute('RELEASE SAVEPOINT restore_checkin')
+            return result
+        except BaseException:
+            if self.conn.in_transaction:
+                self.conn.execute('ROLLBACK TO SAVEPOINT restore_checkin')
+                self.conn.execute('RELEASE SAVEPOINT restore_checkin')
+            raise
 
     def move_checkin(self, checkin_id: int, delta: int) -> None:
         """Swap a check-in with its neighbour (delta -1 = up, +1 = down)."""

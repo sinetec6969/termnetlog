@@ -5,6 +5,11 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+
+class SchemaVersionError(ValueError):
+    """The database was created by a newer application version."""
+
+
 MIGRATIONS: list[str] = [
     # 1: initial schema
     """
@@ -59,11 +64,21 @@ MIGRATIONS: list[str] = [
     CREATE INDEX checkins_callsign_time ON checkins (callsign, time_utc);
     CREATE INDEX nets_started ON nets (started_utc);
     """,
+    # 2: refresh attempts are distinct from the last stored operator data.
+    """
+    CREATE TABLE lookup_attempts (
+        callsign TEXT PRIMARY KEY REFERENCES operators(callsign) ON DELETE CASCADE,
+        attempted_at TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('complete', 'partial', 'not_found', 'error'))
+    );
+    """,
 ]
 
 
 def migrate(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version > len(MIGRATIONS):
+        raise SchemaVersionError(f"Database schema {version} requires a newer termnetlog version")
     for i, script in enumerate(MIGRATIONS[version:], start=version + 1):
         with conn:
             conn.executescript(f"BEGIN;\n{script}\nPRAGMA user_version = {i};\nCOMMIT;")
@@ -73,9 +88,13 @@ def connect(path: Path | str) -> sqlite3.Connection:
     if str(path) != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    if str(path) != ":memory:":
-        conn.execute("PRAGMA journal_mode = WAL")
-    migrate(conn)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        migrate(conn)
+        if str(path) != ":memory:":
+            conn.execute("PRAGMA journal_mode = WAL")
+    except Exception:
+        conn.close()
+        raise
     return conn

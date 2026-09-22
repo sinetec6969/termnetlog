@@ -56,6 +56,8 @@ class StartScreen(Screen):
             label.append(f"{net.name} — started {fmt.date(net.started_utc)} {fmt.hhmm(net.started_utc)}{fmt.zone(net.started_utc)}, {count} check-ins")
             menu.add_option(Option(label, id=f"resume:{net.id}"))
         menu.add_option(Option(Text("＋ New net  (n)", style="bold"), id="new"))
+        for name in self.app.config.templates:
+            menu.add_option(Option(Text(f'＋ Template: {name}'), id=f'template:{name}'))
         menu.add_option(Option("📜 Past nets  (h)", id="history"))
         menu.add_option(Option("👥 Operators  (o)", id="operators"))
         menu.add_option(Option("⏻ Quit  (q)", id="quit"))
@@ -65,9 +67,9 @@ class StartScreen(Screen):
         cfg = self.app.config
         nets, ops = repo.counts()
         status = Text(justify="center")
-        status.append(f"{cfg.my_callsign or 'set my_callsign in config'}", style="bold")
+        status.append(f"{cfg.my_callsign or 'run termnetlog config to set up'}", style="bold")
         status.append(f"  ·  {nets} nets  ·  {ops} operators  ·  lookups: ")
-        status.append(", ".join(p.name for p in self.app.lookup.providers) or "none", style="cyan")
+        status.append("offline" if cfg.offline else ", ".join(p.name for p in self.app.lookup.providers) or "none", style="cyan")
         self.query_one("#start-status", Static).update(status)
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
@@ -76,6 +78,8 @@ class StartScreen(Screen):
             self.app.open_net(int(oid.split(":", 1)[1]))
         elif oid == "new":
             self.action_new_net()
+        elif oid.startswith('template:'):
+            self.start_with_defaults(self.app.config.templates[oid[len('template:'):]])
         elif oid == "history":
             self.action_history()
         elif oid == "operators":
@@ -84,12 +88,15 @@ class StartScreen(Screen):
             self.app.exit()
 
     def action_new_net(self) -> None:
+        self.start_with_defaults(self.app.config.net)
+
+    def start_with_defaults(self, defaults) -> None:
         def done(values: dict | None) -> None:
             if values:
                 net = self.app.repo.create_net(**values)
                 self.app.open_net(net.id)
 
-        self.app.push_screen(NewNetModal(self.app.config.net), done)
+        self.app.push_screen(NewNetModal(defaults), done)
 
     def action_history(self) -> None:
         from termnetlog.tui.screens.history import HistoryScreen

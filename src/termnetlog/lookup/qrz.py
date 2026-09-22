@@ -7,6 +7,7 @@ Accounts without an XML subscription receive a reduced record.
 
 from __future__ import annotations
 
+import asyncio
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -43,19 +44,24 @@ def parse_response(xml_text: str) -> tuple[ET.Element | None, ET.Element | None]
     """Return (Callsign element, Session element)."""
     try:
         root = ET.fromstring(xml_text)
-    except ET.ParseError as e:
-        raise LookupFailed(f"QRZ: bad XML: {e}") from e
+    except ET.ParseError:
+        raise LookupFailed("QRZ: invalid XML response") from None
+    if root.tag != NS + "QRZDatabase":
+        raise LookupFailed("QRZ: unexpected response")
     return root.find(NS + "Callsign"), root.find(NS + "Session")
 
 
 def parse_callsign(el: ET.Element) -> LookupResult:
+    call = _text(el, "call")
+    if not call:
+        raise LookupFailed("QRZ: missing callsign")
     fname = tidy_case(_text(el, "fname"))
     lname = tidy_case(_text(el, "name"))
     full = " ".join(p for p in (fname, lname) if p) or None
     first = fname.split()[0] if fname else None
     cls = _text(el, "class")
     return LookupResult(
-        callsign=(_text(el, "call") or "").upper(),
+        callsign=call.upper(),
         source="qrz",
         first_name=first,
         name=full,
@@ -77,6 +83,7 @@ class QRZProvider:
         self.password = password
         self._client = client
         self._key: str | None = None
+        self._login_lock = asyncio.Lock()
         self.message: str | None = None  # e.g. subscription notice
 
     @property
@@ -101,7 +108,7 @@ class QRZProvider:
         _, session = parse_response(text)
         key = _text(session, "Key")
         if not key:
-            raise QRZAuthError(f"QRZ login failed: {_text(session, 'Error') or 'no session key'}")
+            raise QRZAuthError("QRZ login failed: check credentials and XML access")
         self._key = key
         self.message = _text(session, "Message")
 
@@ -110,8 +117,11 @@ class QRZProvider:
             return None
         for attempt in range(2):
             if self._key is None:
-                await self.login()
-            text = await self._get({"s": self._key or "", "callsign": callsign})
+                async with self._login_lock:
+                    if self._key is None:
+                        await self.login()
+            key = self._key
+            text = await self._get({"s": key or "", "callsign": callsign})
             call_el, session = parse_response(text)
             if call_el is not None:
                 self.message = _text(session, "Message")
@@ -121,9 +131,10 @@ class QRZProvider:
                 return None
             if not _text(session, "Key") and attempt == 0:
                 # Session timed out or key invalid: log in again once.
-                self._key = None
+                if self._key == key:
+                    self._key = None
                 continue
-            raise LookupFailed(f"QRZ: {error or 'unexpected response'}")
+            raise LookupFailed("QRZ: lookup unsuccessful; check XML access or retry later")
         return None
 
     async def aclose(self) -> None:

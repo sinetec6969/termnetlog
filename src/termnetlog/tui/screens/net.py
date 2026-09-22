@@ -1,22 +1,26 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 from typing import TYPE_CHECKING
 
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.suggester import Suggester
 from textual.widgets import DataTable, Footer, Input, Label, Static
+from textual.worker import Worker
 
-from termnetlog import callsign, entry as entry_mod, export
+from termnetlog import callsign, entry as entry_mod
+from termnetlog.config import NetDefaults
 from termnetlog.models import CheckInRow, Net, utcnow
 from termnetlog.repo import DuplicateCheckIn, Repo
 from termnetlog.tui import format as fmt
 from termnetlog.tui.widgets.checkin_table import CallInput, CheckinTable
-from termnetlog.tui.widgets.modals import ConfirmModal, HelpModal, InputModal, NoteModal, OperatorEditModal
+from termnetlog.tui.widgets.modals import ConfirmModal, HelpModal, InputModal, NoteModal, OperatorEditModal, NewNetModal
 from termnetlog.tui.widgets.operator_card import OperatorCard
 
 if TYPE_CHECKING:
@@ -47,6 +51,11 @@ class NetScreen(Screen):
         Binding("ctrl+x", "end_net", "End net", priority=True),
         Binding("ctrl+b", "back", "Menu", priority=True),
         Binding("f1", "help", "Help", priority=True),
+        Binding("f2", "toggle_card", "Operator card", priority=True),
+        Binding("f3", "correct_call", "Correct call", priority=True),
+        Binding("ctrl+d", "edit_metadata", "Net details", priority=True),
+        Binding("ctrl+o", "reopen", "Reopen", priority=True),
+        Binding("ctrl+z", "undo_remove", "Undo removal", priority=True),
     ]
 
     def __init__(self, net_id: int):
@@ -55,6 +64,7 @@ class NetScreen(Screen):
         self.rows: list[CheckInRow] = []
         self.pending: set[str] = set()
         self.preview_call: str | None = None
+        self.card_requested = False
 
     @property
     def repo(self) -> Repo:
@@ -86,16 +96,39 @@ class NetScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.update_layout()
         self.refresh_all()
         self.set_interval(1, self.update_header)
         self.query_one(CallInput).focus()
         # Resuming a net: fill in anyone who was logged while offline.
         for row in self.rows:
-            if row.operator.lookup_at is None:
+            if not self.app.lookup.is_fresh(row.operator):
                 self.start_lookup(row.operator.callsign)
 
     def on_screen_resume(self) -> None:
         self.refresh_all()
+
+    def on_resize(self, event: events.Resize) -> None:
+        if self.is_mounted:
+            self.update_layout()
+
+    def update_layout(self) -> None:
+        narrow = self.size.width < 120
+        table = self.query_one(CheckinTable)
+        selected = table.selected_id()
+        if table.compact != narrow:
+            table.compact = narrow
+            table.clear(columns=True)
+            table.build_columns()
+            table.load(self.rows, selected)
+        self.query_one('#card').display = self.card_requested if narrow else not self.card_requested
+        self.query_one('#left').display = not (narrow and self.card_requested)
+
+    def action_toggle_card(self) -> None:
+        self.card_requested = not self.card_requested
+        self.update_layout()
+        if self.size.width < 120 and self.card_requested:
+            self.query_one(CallInput).focus()
 
     # ---- rendering ---------------------------------------------------------
 
@@ -204,23 +237,29 @@ class NetScreen(Screen):
         text = event.value.strip()
         if not text:
             return
+        if not self.net.is_open:
+            self.notify('Net has ended. Press ctrl+o to reopen before adding check-ins.', severity='warning')
+            return
         entry = entry_mod.parse(text)
         if entry is None:
             self.notify(f"Not a callsign: {text.split()[0]}", severity="error")
             return
         table = self.query_one(CheckinTable)
         try:
-            ci = self.repo.add_checkin(self.net_id, entry.call, relayed_by=entry.relayed_by)
+            ci = self.repo.record_entry(self.net_id, entry)
         except DuplicateCheckIn as e:
             self.notify(str(e), severity="warning")
             event.input.value = ""
             self.preview_call = None
             table.select_id(e.existing.id)
             return
-        for flag in entry.flags:
-            self.repo.set_flag(ci.id, flag)
-        if entry.note:
-            self.repo.set_checkin_notes(ci.id, entry.note)
+        except (sqlite3.Error, OSError):
+            self.notify(
+                "Check-in not saved. Check disk space and database access, then press Enter to retry. "
+                "Your entry is still in the input box.",
+                title="Save failed", severity="error", timeout=10,
+            )
+            return
         event.input.value = ""
         self.preview_call = None
         self.refresh_all(select_id=ci.id)
@@ -228,12 +267,15 @@ class NetScreen(Screen):
 
     # ---- lookups -----------------------------------------------------------
 
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        self.app.report_lookup_worker_state(event)
+
     def start_lookup(self, call: str, force: bool = False) -> None:
         if call in self.pending:
             return
         self.pending.add(call)
         self.update_card()
-        self.run_worker(self._lookup(call, force), group="lookup")
+        self.run_worker(self._lookup(call, force), group="lookup", exit_on_error=False)
 
     async def _lookup(self, call: str, force: bool) -> None:
         try:
@@ -255,6 +297,8 @@ class NetScreen(Screen):
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action == "end_net":
             return self.net.is_open
+        if action == 'reopen':
+            return not self.net.is_open
         if action == "toggle_flag" and parameters == ("recognized",):
             return self.net.is_ncs
         return True
@@ -293,6 +337,68 @@ class NetScreen(Screen):
                 self.refresh_all(select_id=row.checkin.id)
 
         self.app.push_screen(NoteModal(f"Check-in note — {row.checkin.logged_as}", row.checkin.notes), done)
+
+    def action_correct_call(self) -> None:
+        row = self._require_row()
+        if row is None:
+            return
+
+        def entered(value: str | None) -> None:
+            if value is None:
+                return
+            call = callsign.parse(value.strip())
+            if call is None:
+                self.notify('Enter a valid callsign.', severity='error')
+                return
+            if any(r.checkin.id != row.checkin.id and r.operator.callsign == call.base for r in self.rows):
+                self.notify('That operator is already checked in; no records were changed.', severity='warning')
+                return
+
+            def confirmed(yes: bool | None) -> None:
+                if not yes:
+                    return
+                try:
+                    self.repo.correct_callsign(row.checkin.id, call)
+                except (sqlite3.Error, OSError, ValueError, DuplicateCheckIn):
+                    self.notify('Correction failed; reload and retry. No correction was saved.', severity='error')
+                    return
+                self.refresh_all(select_id=row.checkin.id)
+                self.start_lookup(call.base)
+
+            self.app.push_screen(ConfirmModal(
+                f'Change {row.checkin.logged_as} to {call.raw} for this check-in only? '
+                'Time, order, flags and entry note stay. Operator profiles and private notes stay with their original callsigns.'
+            ), confirmed)
+
+        self.app.push_screen(InputModal('Correct selected check-in callsign', row.checkin.logged_as), entered)
+
+    def action_edit_metadata(self) -> None:
+        net = self.net
+        defaults = NetDefaults(net.name, net.frequency, net.mode, net.band, net.my_role, net.ncs_callsign, net.notes)
+
+        def done(values: dict | None) -> None:
+            if values is not None:
+                try:
+                    self.repo.update_net(net.id, **values)
+                except (sqlite3.Error, OSError):
+                    self.notify('Net details could not be saved.', severity='error')
+                    return
+                self.refresh_all()
+                self.refresh_bindings()
+
+        self.app.push_screen(NewNetModal(defaults, 'Edit net details', 'Save (ctrl+s)'), done)
+
+    def action_reopen(self) -> None:
+        def done(yes: bool | None) -> None:
+            if yes:
+                try:
+                    self.repo.reopen_net(self.net_id)
+                except (sqlite3.Error, OSError):
+                    self.notify('Net could not be reopened.', severity='error')
+                    return
+                self.refresh_all()
+                self.refresh_bindings()
+        self.app.push_screen(ConfirmModal('Reopen this ended net to accept new check-ins?'), done)
 
     def action_edit_operator_notes(self) -> None:
         row = self._require_row()
@@ -351,10 +457,36 @@ class NetScreen(Screen):
 
         def done(yes: bool | None) -> None:
             if yes:
-                self.repo.delete_checkin(row.checkin.id)
+                try:
+                    removed = self.repo.delete_checkin(row.checkin.id)
+                except (sqlite3.Error, OSError):
+                    self.notify('Removal failed; no entry was removed.', severity='error')
+                    return
+                if removed is not None:
+                    stack = self.app.removed_checkins.setdefault(self.net_id, [])
+                    stack.append(removed)
+                    del stack[:-50]
+                    self.notify('Check-in removed. Ctrl+Z restores it during this application session.')
                 self.refresh_all()
 
         self.app.push_screen(ConfirmModal(f"Remove check-in #{row.checkin.seq} {row.checkin.logged_as}?"), done)
+
+    def action_undo_remove(self) -> None:
+        stack = self.app.removed_checkins.get(self.net_id, [])
+        if not stack:
+            self.notify('No removal to undo in this application session.')
+            return
+        try:
+            restored = self.repo.restore_checkin(stack[-1])
+        except DuplicateCheckIn:
+            self.notify('Undo blocked: that callsign is already checked in. No records changed.', severity='warning')
+            return
+        except (sqlite3.Error, OSError):
+            self.notify('Undo failed; the removal remains available to retry.', severity='error')
+            return
+        stack.pop()
+        self.refresh_all(select_id=restored.id)
+        self.notify(f'Restored {restored.logged_as}.')
 
     def action_move(self, delta: int) -> None:
         row = self._require_row()
@@ -387,9 +519,7 @@ class NetScreen(Screen):
     def action_export(self) -> None:
         net = self.net
         rows = self.repo.list_checkins(net.id)
-        paths = self.app.write_exports(net, rows)
-        self.app.copy_to_clipboard(export.to_text(net, rows))
-        self.notify("Roster copied to clipboard\n" + "\n".join(str(p) for p in paths), title="Exported", timeout=10)
+        self.app.export_net(net, rows)
 
     def action_back(self) -> None:
         self.app.pop_screen()

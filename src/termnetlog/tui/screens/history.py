@@ -6,9 +6,8 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Static
+from textual.widgets import DataTable, Footer, Static, Input
 
-from termnetlog import export
 from termnetlog.tui import format as fmt
 from termnetlog.tui.widgets.modals import ConfirmModal
 
@@ -20,14 +19,27 @@ class HistoryScreen(Screen):
     app: NetLogApp
 
     BINDINGS = [
+        Binding("ctrl+n", "page(1)", "Next page", priority=True),
+        Binding("ctrl+p", "page(-1)", "Previous page", priority=True),
+        Binding("slash", "search", "Search"),
         Binding("enter", "open", "Open"),
         Binding("x", "export", "Export"),
         Binding("delete", "delete", "Delete"),
         Binding("escape,ctrl+b", "app.pop_screen", "Back"),
     ]
 
+    PAGE_SIZE = 50
+
+    def __init__(self):
+        super().__init__()
+        self.page = 0
+        self.search = ""
+        self.total = 0
+
     def compose(self) -> ComposeResult:
         yield Static(Text(" Past nets ", style="bold reverse"), id="net-header")
+        yield Input(placeholder="Search net name or UTC date (YYYY-MM-DD)", id="history-search")
+        yield Static(id="history-page")
         yield DataTable(id="nets", cursor_type="row", zebra_stripes=True)
         yield Footer()
 
@@ -43,10 +55,14 @@ class HistoryScreen(Screen):
 
     def reload(self) -> None:
         table = self.query_one(DataTable)
+        selected = self.selected_net_id()
         current = table.cursor_row
+        self.total = self.app.repo.count_nets(self.search)
+        self.page = min(self.page, max(0, (self.total - 1) // self.PAGE_SIZE))
         table.clear()
         table.columns["Time"].label = Text(fmt.zone_label())
-        for net, count in self.app.repo.list_nets():
+        records = self.app.repo.list_nets(limit=self.PAGE_SIZE, offset=self.page * self.PAGE_SIZE, search=self.search)
+        for net, count in records:
             table.add_row(
                 Text(str(net.id), justify="right"),
                 fmt.date(net.started_utc),
@@ -61,7 +77,32 @@ class HistoryScreen(Screen):
                 key=str(net.id),
             )
         if table.row_count:
-            table.move_cursor(row=min(current, table.row_count - 1), animate=False)
+            index = next((i for i, (net, _) in enumerate(records) if net.id == selected), min(current, table.row_count - 1))
+            table.move_cursor(row=index, animate=False)
+        start = self.page * self.PAGE_SIZE + 1 if self.total else 0
+        end = self.page * self.PAGE_SIZE + len(records)
+        self.query_one('#history-page', Static).update(
+            f" {start}–{end} of {self.total} nets · Page {self.page + 1}/{max(1, (self.total + self.PAGE_SIZE - 1) // self.PAGE_SIZE)}"
+            if self.total else " No matching nets" if self.search else " No nets yet"
+        )
+
+    def action_page(self, delta: int) -> None:
+        page = max(0, min(self.page + delta, max(0, (self.total - 1) // self.PAGE_SIZE)))
+        if page != self.page:
+            self.page = page
+            self.query_one(DataTable).move_cursor(row=0, animate=False)
+            self.reload()
+
+    def action_search(self) -> None:
+        self.query_one(Input).focus()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        self.search = event.value.strip()
+        self.page = 0
+        self.reload()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.query_one(DataTable).focus()
 
     def selected_net_id(self) -> int | None:
         table = self.query_one(DataTable)
@@ -84,9 +125,7 @@ class HistoryScreen(Screen):
         if net is None:
             return
         rows = self.app.repo.list_checkins(net.id)
-        paths = self.app.write_exports(net, rows)
-        self.app.copy_to_clipboard(export.to_text(net, rows))
-        self.notify("Roster copied to clipboard\n" + "\n".join(str(p) for p in paths), title="Exported", timeout=10)
+        self.app.export_net(net, rows)
 
     def action_delete(self) -> None:
         net_id = self.selected_net_id()
@@ -97,6 +136,7 @@ class HistoryScreen(Screen):
         def done(yes: bool | None) -> None:
             if yes:
                 self.app.repo.delete_net(net.id)
+                self.app.removed_checkins.pop(net.id, None)
                 self.reload()
 
         self.app.push_screen(

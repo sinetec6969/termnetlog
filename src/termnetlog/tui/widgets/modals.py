@@ -105,14 +105,16 @@ class NewNetModal(ModalScreen[dict | None]):
         Binding("ctrl+s", "start", "Start", priority=True),
     ]
 
-    def __init__(self, defaults: NetDefaults):
+    def __init__(self, defaults: NetDefaults, title: str = 'Start a new net', submit: str = 'Start net (ctrl+s)'):
         super().__init__()
         self.defaults = defaults
+        self.heading = title
+        self.submit_label = submit
 
     def compose(self) -> ComposeResult:
         d = self.defaults
         with Vertical(classes="dialog"):
-            yield Label("Start a new net", classes="dialog-title")
+            yield Label(self.heading, classes="dialog-title")
             with Grid(classes="form"):
                 yield Label("Net name")
                 yield Input(d.name, id="name")
@@ -132,7 +134,7 @@ class NewNetModal(ModalScreen[dict | None]):
                 yield Label("NCS callsign")
                 yield Input(d.ncs_callsign, id="ncs", placeholder="who is running the net")
             with Horizontal(classes="buttons"):
-                yield Button("Start net (ctrl+s)", variant="primary", id="start")
+                yield Button(self.submit_label, variant="primary", id="start")
                 yield Button("Cancel (esc)", id="cancel")
 
     def on_mount(self) -> None:
@@ -151,6 +153,7 @@ class NewNetModal(ModalScreen[dict | None]):
             return
         values["ncs_callsign"] = self.query_one("#ncs", Input).value.strip().upper()
         values["my_role"] = str(self.query_one("#role", Select).value)
+        values['notes'] = self.defaults.notes
         self.dismiss(values)
 
     def action_cancel(self) -> None:
@@ -249,6 +252,11 @@ Flag letters: **t** traffic · **s** short time · **r** ragchew · **c** recogn
 | **ctrl+x** | end net |
 | **ctrl+b** | back to menu |
 | **ctrl+t** | toggle times between UTC and local (Eastern by default) |
+| **f2** | toggle operator card (replaces roster in narrow terminals) |
+| **f3** | correct selected check-in callsign, with confirmation |
+| **ctrl+d** | edit net details |
+| **ctrl+o** | reopen an ended net, with confirmation |
+| **ctrl+z** | undo last check-in removal (current application session) |
 | **f1** | this help |
 """
 

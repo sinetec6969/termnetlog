@@ -81,7 +81,7 @@ async def test_log_a_net(repo, tmp_path):
     w1aw = repo.list_checkins(net_id)[0].checkin
     assert w1aw.ragchew == 1 and w1aw.notes == "new beam"
     assert not repo.get_net(net_id).is_open
-    exports = sorted(p.suffix for p in (tmp_path / "exports").iterdir())
+    exports = sorted(p.suffix for p in (tmp_path / "exports").rglob('*') if p.is_file())
     assert exports == [".adi", ".txt"]
 
 
@@ -132,7 +132,8 @@ async def test_toggle_utc_local(repo, tmp_path):
 
         await pilot.press("ctrl+t")
         await pilot.pause()
-        assert str(table.columns["time"].label) in ("EDT", "EST")  # heading follows today's offset
+        assert str(table.columns["time"].label) == "Local"
+        assert fmt.zone_name() == "America/New_York"
         assert table.get_cell(str(ci.id), "time") == "2130"  # previous evening, UTC-4
         assert fmt.date("2026-09-13T01:30:00Z") == "2026-09-12"
         assert fmt.zone("2026-01-13T01:30:00Z") == "EST"
