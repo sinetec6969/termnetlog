@@ -7,7 +7,9 @@ import pytest
 from termnetlog import backup, cli, db
 
 
-def seed(path, label='original', version=2):
+def seed(path, label='original', version=None):
+    if version is None:
+        version = len(db.MIGRATIONS)
     with closing(sqlite3.connect(path)) as conn:
         for script in db.MIGRATIONS[:version]:
             conn.executescript(script)
@@ -29,7 +31,7 @@ def test_complete_recovery_and_safety_snapshot(tmp_path):
     seed(original)
     snapshot = backup.backup(original, tmp_path / 'snapshots')
     metadata = json.loads((snapshot / 'metadata.json').read_text())
-    assert metadata['schema_version'] == 2 and metadata['app_version']
+    assert metadata['schema_version'] == len(db.MIGRATIONS) and metadata['app_version']
     assert set(p.name for p in snapshot.iterdir()) == {'netlog.db', 'metadata.json'}
     assert backup.restore(snapshot, target) is None
     assert contents(target) == contents(original)
@@ -85,15 +87,18 @@ def test_replace_requires_explicit_flag(tmp_path):
     assert contents(target)['nets'][0][1] == 'target'
 
 
-def test_old_schema_upgrades_only_restored_copy(tmp_path):
+@pytest.mark.parametrize('version', [1, 2])
+def test_old_schema_upgrades_only_restored_copy(tmp_path, version):
     source, target = tmp_path / 'source.db', tmp_path / 'target.db'
-    seed(source, version=1)
+    seed(source, version=version)
     backup.restore(source, target)
     with closing(sqlite3.connect(source)) as conn:
-        assert conn.execute('PRAGMA user_version').fetchone()[0] == 1
+        assert conn.execute('PRAGMA user_version').fetchone()[0] == version
     with closing(sqlite3.connect(target)) as conn:
-        assert backup.validate(conn) == 2
-    assert contents(source) == contents(target)
+        assert backup.validate(conn) == len(db.MIGRATIONS)
+    expected = contents(source)
+    expected['checkins'] = [row + (0,) for row in expected['checkins']]
+    assert expected == contents(target)
 
 
 def test_failed_safety_backup_prevents_replacement(tmp_path, monkeypatch):

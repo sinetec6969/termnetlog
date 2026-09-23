@@ -9,6 +9,7 @@ FLAG_LABELS = {
     "has_traffic": "traffic",
     "mobile": "mobile",
     "portable": "portable",
+    "echolink": "EchoLink",
     "short_time": "short time",
     "recognized": "recognized",
     "ragchew": "ragchew",

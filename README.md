@@ -121,14 +121,14 @@ k9xyz/m t r                mobile, has traffic, staying for the ragchew
 n0call via w1aw weak       relayed by W1AW, note "weak"
 ```
 
-Flags: **t** traffic · **s** short time · **r** ragchew · **c** recognized · **m** mobile · **p** portable
+Flags: **t** traffic · **s** short time · **r** ragchew · **c** recognized · **m** mobile · **p** portable · **e** EchoLink
 
 A submitted entry saves the operator, check-in, flags, relay, and note in one
 transaction. If saving fails, the entry remains in the input box for retry;
 no partial check-in is retained.
 
 `esc` jumps to the check-in list, where those same letters toggle flags on the selected row,
-`enter` edits the check-in note, `o` edits persistent operator notes, `e` edits operator details,
+`enter` edits the check-in note, `o` edits persistent operator notes, `Shift+E` edits operator details,
 `l` re-runs the lookup. Start typing a callsign to jump back to the entry line.
 `ctrl+e` export · `ctrl+g` net notes · `ctrl+x` end net · `ctrl+b` menu · `ctrl+t` UTC/Eastern times · `f1` help.
 

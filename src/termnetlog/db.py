@@ -72,6 +72,10 @@ MIGRATIONS: list[str] = [
         status TEXT NOT NULL CHECK (status IN ('complete', 'partial', 'not_found', 'error'))
     );
     """,
+    # 3: EchoLink check-in flag.
+    """
+    ALTER TABLE checkins ADD COLUMN echolink INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 

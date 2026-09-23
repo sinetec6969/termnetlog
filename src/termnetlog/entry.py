@@ -6,7 +6,7 @@ Syntax:  CALL [flags...] [via RELAY] [note words...]
     k9xyz/m t r             mobile, has traffic, staying for ragchew
     n0call via w1aw weak    relayed by W1AW, note "weak"
 
-Flag letters: t traffic, s short time, r ragchew, c recognized, m mobile, p portable.
+Flag letters: t traffic, s short time, r ragchew, c recognized, m mobile, p portable, e EchoLink.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ FLAG_LETTERS = {
     "c": "recognized",
     "m": "mobile",
     "p": "portable",
+    "e": "echolink",
 }
 
 

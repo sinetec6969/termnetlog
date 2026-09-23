@@ -229,15 +229,15 @@ HELP = """\
 
 Entry syntax: `CALL [flags] [via RELAY] [note…]`
 e.g. `k9xyz/m t r` or `n0call via w1aw weak signal`.
-Flag letters: **t** traffic · **s** short time · **r** ragchew · **c** recognized · **m** mobile · **p** portable
+Flag letters: **t** traffic · **s** short time · **r** ragchew · **c** recognized · **m** mobile · **p** portable · **e** EchoLink
 
 ## Check-in list focused
 | Key | Action |
 |---|---|
-| **t s r c m p** | toggle flag on selected check-in |
+| **t s r c m p e** | toggle flag on selected check-in |
 | **enter** | edit check-in note |
 | **o** | edit persistent operator notes |
-| **e** | edit operator details |
+| **shift+e** | edit operator details |
 | **l** | re-run QRZ/HamDB lookup |
 | **v** | set relayed-via |
 | **delete** | remove check-in |

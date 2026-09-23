@@ -91,7 +91,7 @@ class Net:
         return self.my_role == "ncs"
 
 
-FLAGS = ("mobile", "portable", "has_traffic", "short_time", "recognized", "ragchew")
+FLAGS = ("mobile", "portable", "has_traffic", "short_time", "recognized", "ragchew", "echolink")
 
 
 @dataclass
@@ -108,6 +108,7 @@ class CheckIn:
     short_time: int = 0
     recognized: int = 0
     ragchew: int = 0
+    echolink: int = 0
     relayed_by: str = ""
     notes: str = ""
 

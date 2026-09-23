@@ -111,7 +111,7 @@ async def test_operator_dialog_scrolls_to_last_field_at_80x24(repo, tmp_path):
     async with app.run_test(size=(80, 24)) as pilot:
         app.open_net(session.id)
         await pilot.pause()
-        await pilot.press('escape', 'e')
+        await pilot.press('escape', 'E')
         for _ in range(8):
             await pilot.press('tab')
         await pilot.pause()

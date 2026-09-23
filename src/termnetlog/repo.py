@@ -270,8 +270,8 @@ class Repo:
             ).fetchone()[0]
             cur = self.conn.execute(
                 "INSERT INTO checkins (net_id, callsign, logged_as, seq, time_utc,"
-                " mobile, portable, has_traffic, short_time, recognized, ragchew, relayed_by, notes)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " mobile, portable, has_traffic, short_time, recognized, ragchew, echolink, relayed_by, notes)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (net_id, call.base, call.raw, seq, to_iso(utcnow()),
                  *(int(flag in flags) for flag in FLAGS), entry.relayed_by, entry.note),
             )

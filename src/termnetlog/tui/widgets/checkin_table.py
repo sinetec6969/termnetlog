@@ -14,6 +14,7 @@ FLAG_BADGES = [
     ("short_time", "S", "yellow"),
     ("mobile", "M", "cyan"),
     ("portable", "P", "cyan"),
+    ("echolink", "E", "cyan"),
     ("ragchew", "☕", "bold yellow"),
 ]
 
@@ -45,7 +46,8 @@ class CheckinTable(DataTable):
         Binding("p", "screen.toggle_flag('portable')", "Portable", show=False),
         Binding("enter", "screen.edit_note", "Note"),
         Binding("o", "screen.edit_operator_notes", "Op notes"),
-        Binding("e", "screen.edit_operator", "Edit op", show=False),
+        Binding("e", "screen.toggle_flag('echolink')", "EchoLink", show=False),
+        Binding("E", "screen.edit_operator", "Edit op", show=False),
         Binding("l", "screen.relookup", "Lookup", show=False),
         Binding("v", "screen.set_relay", "Via", show=False),
         Binding("delete", "screen.delete_checkin", "Remove", show=False),

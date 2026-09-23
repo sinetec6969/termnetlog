@@ -19,7 +19,7 @@ def net(repo):
 
 def test_complete_entry_is_saved_in_one_operation(repo):
     session = net(repo)
-    parsed = entry.parse('w1aw/m t s c r p via k9xyz testing complete save')
+    parsed = entry.parse('w1aw/m t s c r p e via k9xyz testing complete save')
     ci = repo.record_entry(session.id, parsed)
     assert all(getattr(ci, flag) == 1 for flag in FLAGS)
     assert ci.notes == 'testing complete save' and ci.relayed_by == 'K9XYZ'
