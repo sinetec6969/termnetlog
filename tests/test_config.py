@@ -21,7 +21,7 @@ def test_default_config_created_privately(tmp_path):
     path = tmp_path / 'config' / 'config.toml'
     cfg = config.load(path)
     assert cfg.net.name == 'Nightly 2m Net' and cfg.cache_days == 30
-    assert cfg.local_tz == 'America/New_York' and not cfg.local_time
+    assert cfg.local_tz == 'America/New_York' and cfg.local_time
     assert path.read_text(encoding='utf-8') == config.DEFAULT_CONFIG
     if os.name == 'posix':
         assert path.stat().st_mode & 0o777 == 0o600
@@ -141,8 +141,9 @@ repo = Repo(db.connect(':memory:'))
 app = NetLogApp(cfg, repo, LookupService(repo, []))
 async def main():
     async with app.run_test() as pilot:
+        assert fmt.clock('2026-09-13T01:30:00Z') == '9:30 PM'
         await pilot.press('ctrl+t')
-        assert fmt.hhmm('2026-09-13T01:30:00Z') == '2130'
+        assert fmt.clock('2026-09-13T01:30:00Z') == '1:30 AM'
 asyncio.run(main())
 repo.conn.close()
 '''
@@ -160,13 +161,19 @@ def test_timezone_labels_and_dst_transitions():
         assert fmt.zone_label() == 'Local' and fmt.zone_name() == 'America/New_York'
         assert fmt.zone('2026-01-01T12:00:00Z') == 'EST'
         assert fmt.zone('2026-07-01T12:00:00Z') == 'EDT'
-        assert fmt.hhmm('2026-03-08T06:59:00Z') == '0159'
-        assert fmt.hhmm('2026-03-08T07:00:00Z') == '0300'
-        assert fmt.hhmm('2026-11-01T05:30:00Z') == fmt.hhmm('2026-11-01T06:30:00Z') == '0130'
+        assert fmt.clock('2026-03-08T06:59:00Z') == '1:59 AM'
+        assert fmt.clock('2026-03-08T07:00:00Z') == '3:00 AM'
+        assert fmt.clock('2026-11-01T05:30:00Z') == fmt.clock('2026-11-01T06:30:00Z') == '1:30 AM'
+        assert fmt.clock('2026-07-01T16:05:00Z') == '12:05 PM'
+        assert fmt.clock('2026-07-01T04:05:09Z', seconds=True) == '12:05:09 AM'
+        assert fmt.stamp('2026-07-01T23:05:00Z') == '7:05 PM EDT'
         assert fmt.zone('2026-11-01T05:30:00Z') == 'EDT'
         assert fmt.zone('2026-11-01T06:30:00Z') == 'EST'
         fmt.toggle_local()
-        assert fmt.zone_label() == 'UTC' and fmt.hhmm('2026-07-01T12:00:00Z') == '1200'
+        assert fmt.zone_label() == 'UTC' and fmt.clock('2026-07-01T12:00:00Z') == '12:00 PM'
+        assert fmt.clock('2026-07-01T23:05:09Z', seconds=True) == '11:05:09 PM'
+        assert fmt.clock('2026-07-01T00:05:00Z') == '12:05 AM'
+        assert fmt.stamp('2026-07-01T23:05:00Z') == '11:05 PM UTC'
     finally:
         fmt.set_display_tz('UTC', False)
 
@@ -180,7 +187,7 @@ def test_utc_remains_available_if_all_zone_data_is_missing(tmp_path, monkeypatch
     cfg = config.load(path)
     try:
         fmt.set_display_tz(cfg.local_tz, cfg.local_time)
-        assert fmt.hhmm('2026-09-13T01:30:00Z') == '0130'
+        assert fmt.clock('2026-09-13T01:30:00Z') == '1:30 AM'
         with pytest.raises(config.ConfigError, match='timezone data is missing'):
             config.display_timezone('America/New_York')
     finally:

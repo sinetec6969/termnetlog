@@ -148,12 +148,11 @@ class NetScreen(Screen):
         if net.ncs_callsign:
             t.append(f"  NCS {net.ncs_callsign}")
         t.append(f"  [{'net control' if net.is_ncs else 'participant'}]", style="dim")
-        t.append(f"   {fmt.local(now):%H:%M:%S}{fmt.zone(now)}", style="bold cyan")
+        t.append(f"   {fmt.stamp(now, seconds=True)}", style="bold cyan")
         if net.is_open:
             t.append(f"   ⏱ {fmt.elapsed(net.started_utc)}")
         else:
-            ended = fmt.local(net.ended_utc)
-            t.append(f"   {fmt.date(net.started_utc)} ended {ended:%H:%M}{fmt.zone(ended)} ({fmt.elapsed(net.started_utc, net.ended_utc)})", style="yellow")
+            t.append(f"   {fmt.date(net.started_utc)} ended {fmt.stamp(net.ended_utc)} ({fmt.elapsed(net.started_utc, net.ended_utc)})", style="yellow")
         n = len(self.rows)
         t.append(f"   {n} check-in{'s' if n != 1 else ''}", style="bold")
         new = sum(1 for r in self.rows if r.is_new)

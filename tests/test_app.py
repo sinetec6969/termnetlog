@@ -127,17 +127,17 @@ async def test_toggle_utc_local(repo, tmp_path):
         app.open_net(net.id)
         await pilot.pause()
         table = app.screen.query_one(CheckinTable)
-        assert str(table.columns["time"].label) == "UTC"
-        assert table.get_cell(str(ci.id), "time") == "0130"
-
-        await pilot.press("ctrl+t")
-        await pilot.pause()
         assert str(table.columns["time"].label) == "Local"
         assert fmt.zone_name() == "America/New_York"
-        assert table.get_cell(str(ci.id), "time") == "2130"  # previous evening, UTC-4
+        assert table.get_cell(str(ci.id), "time") == "9:30 PM"  # previous evening, UTC-4
         assert fmt.date("2026-09-13T01:30:00Z") == "2026-09-12"
         assert fmt.zone("2026-01-13T01:30:00Z") == "EST"
 
         await pilot.press("ctrl+t")
         await pilot.pause()
-        assert table.get_cell(str(ci.id), "time") == "0130"
+        assert str(table.columns["time"].label) == "UTC"
+        assert table.get_cell(str(ci.id), "time") == "1:30 AM"
+
+        await pilot.press("ctrl+t")
+        await pilot.pause()
+        assert table.get_cell(str(ci.id), "time") == "9:30 PM"

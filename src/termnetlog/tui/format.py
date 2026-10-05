@@ -34,9 +34,9 @@ def local(iso: str | datetime | None) -> datetime | None:
 
 
 def zone(iso: str | datetime | None = None) -> str:
-    """Suffix for a displayed time: 'Z' for UTC, else the zone abbreviation (EDT/EST) at that moment."""
+    """Suffix for a displayed time: 'UTC', else the zone abbreviation (EDT/EST) at that moment."""
     if not _show_local:
-        return "Z"
+        return "UTC"
     return (local(iso) or datetime.now(_local_tz)).strftime("%Z")
 
 
@@ -67,9 +67,19 @@ def ago(iso: str | None, now: datetime | None = None) -> str:
     return f"{days // 365}y"
 
 
-def hhmm(iso: str | None) -> str:
+def clock(iso: str | datetime | None, seconds: bool = False) -> str:
+    """12-hour time in the display zone: '7:05 PM', or '7:05:09 PM' with seconds."""
     t = local(iso)
-    return f"{t:%H%M}" if t else ""
+    if t is None:
+        return ""
+    hour = t.hour % 12 or 12
+    rest = f"{t:%M:%S}" if seconds else f"{t:%M}"
+    return f"{hour}:{rest} {t:%p}"
+
+
+def stamp(iso: str | datetime | None, seconds: bool = False) -> str:
+    """A time with its zone: '11:05 PM UTC', or '7:05 PM EDT' in local time."""
+    return f"{clock(iso, seconds)} {zone(iso)}"
 
 
 def date(iso: str | None) -> str:

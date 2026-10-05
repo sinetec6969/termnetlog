@@ -56,16 +56,32 @@ class CheckinTable(DataTable):
         Binding("escape", "screen.focus_entry", "Entry", show=False),
     ]
     BOUND_CHARS = set("tcrsmpoelv")
+    MIN_NOTE_WIDTH = 11
     compact = False
+    loaded_rows: list[CheckInRow] = []
 
     def on_mount(self) -> None:
         self.cursor_type = "row"
         self.zebra_stripes = True
         self.build_columns()
 
+    def on_resize(self, event: events.Resize) -> None:
+        # The note column takes whatever width the fixed columns leave over.
+        if self.fill_note_width() != self.columns["note"].width:
+            selected = self.selected_id()
+            self.clear(columns=True)
+            self.build_columns()
+            self.load(self.loaded_rows, selected)
+
+    def fill_note_width(self) -> int:
+        fixed = [column.width for key, column in self.columns.items() if key != "note"]
+        padding = 2 * self.cell_padding * (len(fixed) + 1)
+        available = self.size.width - self.styles.scrollbar_size_vertical - sum(fixed) - padding
+        return max(self.MIN_NOTE_WIDTH, available)
+
     def build_columns(self) -> None:
         self.add_column("#", key="seq", width=3)
-        self.add_column(fmt.zone_label(), key="time", width=5)
+        self.add_column(fmt.zone_label(), key="time", width=8)
         self.add_column("Call", key="call", width=10)
         self.add_column("Name", key="name", width=12)
         if not self.compact:
@@ -73,6 +89,7 @@ class CheckinTable(DataTable):
         self.add_column("Flags", key="flags", width=10)
         self.add_column("Nets", key="nth", width=4)
         self.add_column("Last", key="last", width=6)
+        self.add_column("Note", key="note", width=self.fill_note_width())
 
     def on_key(self, event: events.Key) -> None:
         # Typing a callsign character while the list is focused jumps to the entry box.
@@ -86,6 +103,7 @@ class CheckinTable(DataTable):
 
     def load(self, rows: list[CheckInRow], select_id: int | None = None) -> None:
         current = self.selected_id()
+        self.loaded_rows = rows
         existing = [key.value for key in self.rows]
         incoming = [str(row.checkin.id) for row in rows]
         # Appending a check-in or enriching a profile need not rebuild every row.
@@ -100,13 +118,14 @@ class CheckinTable(DataTable):
                 last = Text(fmt.ago(row.prev_seen))
             cells = (
                 Text(str(ci.seq), justify="right"),
-                fmt.hhmm(ci.time_utc),
+                fmt.clock(ci.time_utc),
                 Text(ci.logged_as, style="bold"),
                 op.display_name,
                 *([] if self.compact else [op.location]),
                 flag_cell(row),
                 Text(str(row.nth), justify="right"),
                 last,
+                Text(" ".join(ci.notes.split()), no_wrap=True, overflow="ellipsis"),
             )
             key = str(ci.id)
             if key in self.rows:

@@ -146,3 +146,24 @@ async def test_roster_refresh_updates_cells_and_reorders_without_stale_rows(repo
         repo.delete_checkin(second.id)
         app.screen.refresh_all()
         assert table.row_count == 1 and table.get_row_index(str(first.id)) == 0
+
+
+@pytest.mark.parametrize('size', [(80, 24), (100, 30), (140, 40)])
+async def test_roster_shows_checkin_note_column_that_fills_width(repo, tmp_path, size):
+    session = net(repo)
+    ci = repo.add_checkin(session.id, callsign.parse('W1AW'))
+    repo.set_checkin_notes(ci.id, 'weak signal\nfrom the north ' + 'x' * 200)
+    app = app_for(repo, tmp_path)
+    async with app.run_test(size=size) as pilot:
+        app.open_net(session.id)
+        await pilot.pause()
+        table = app.screen.query_one(CheckinTable)
+        cell = table.get_cell(str(ci.id), 'note')
+        assert str(cell).startswith('weak signal from the north')
+        assert table.columns['note'].width >= CheckinTable.MIN_NOTE_WIDTH
+        assert table.virtual_size.width <= table.size.width or size[0] >= 120
+        await pilot.resize_terminal(80, 24)
+        await pilot.pause()
+        assert table.virtual_size.width <= table.size.width
+        assert table.selected_id() == ci.id
+        assert table.get_cell(str(ci.id), 'note') == cell

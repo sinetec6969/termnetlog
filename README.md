@@ -133,11 +133,13 @@ no partial check-in is retained.
 `ctrl+e` export · `ctrl+g` net notes · `ctrl+x` end net · `ctrl+b` menu · `ctrl+t` UTC/Eastern times · `f1` help.
 
 `ctrl+t` only changes what's on screen; the database, text roster, and ADIF exports stay in UTC.
-Set `[display] local_tz` (default `America/New_York`) and `local_time = true` in the config to change the zone or start in local time.
+Displayed times are 12-hour (`7:05 PM EDT`, `11:05 PM UTC`) and start in local time. Set `[display] local_tz` (default `America/New_York`) to change the zone, or `local_time = false` to start in UTC.
 Timezone data is included as a package dependency. `local_tz = "UTC"` also works
 without timezone data. Local-time columns use the heading `Local`; individual
 timestamps use the historical daylight-saving offset, rather than today's offset.
 
+The roster's last column shows each check-in's note (from the entry line or
+**enter**), using whatever width is left and trimming long notes with `…`.
 At widths below 120 columns, the compact roster omits the location column.
 Press **F2** to switch between the roster and the full, scrollable operator card;
 at wider sizes F2 hides/shows the side card. Tables allow horizontal scrolling.

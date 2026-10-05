@@ -66,7 +66,7 @@ class HistoryScreen(Screen):
             table.add_row(
                 Text(str(net.id), justify="right"),
                 fmt.date(net.started_utc),
-                fmt.hhmm(net.started_utc),
+                fmt.clock(net.started_utc),
                 fmt.elapsed(net.started_utc, net.ended_utc) if net.ended_utc else "",
                 Text(net.name, style="bold"),
                 net.frequency,

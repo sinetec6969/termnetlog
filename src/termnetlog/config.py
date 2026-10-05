@@ -59,7 +59,7 @@ hamdb = true            # use api.hamdb.org as a free fallback
 [display]
 # ctrl+t toggles displayed times between UTC and this zone. Logs and ADIF stay UTC.
 local_tz = "America/New_York"
-local_time = false      # start in local time instead of UTC
+local_time = true       # start in local time; false starts in UTC
 """
 
 
@@ -85,7 +85,7 @@ class Config:
     offline: bool = False
     templates: dict[str, NetDefaults] = field(default_factory=dict)
     local_tz: str = "America/New_York"
-    local_time: bool = False
+    local_time: bool = True
     db_path: Path = field(default_factory=lambda: default_db_path())
 
 
@@ -160,7 +160,7 @@ def _from_data(data: dict) -> Config:
         hamdb=value(lookup, 'hamdb', True, 'lookup.hamdb'),
         offline=value(lookup, 'offline', False, 'lookup.offline'),
         local_tz=value(display, 'local_tz', 'America/New_York', 'display.local_tz'),
-        local_time=value(display, 'local_time', False, 'display.local_time'),
+        local_time=value(display, 'local_time', True, 'display.local_time'),
     )
     cfg.net.ncs_callsign = cfg.net.ncs_callsign.strip().upper()
     if cfg.net.role not in ('ncs', 'participant'):
