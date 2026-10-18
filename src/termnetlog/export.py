@@ -47,6 +47,10 @@ def to_adif(net: Net, rows: list[CheckInRow], station_callsign: str = "", *,
         f"{_adif_field('ADIF_VER', '3.1.4')}{_adif_field('PROGRAMID', 'termnetlog')}"
         f"{_adif_field('PROGRAMVERSION', __version__)}\n<EOH>\n"
     )
+    incomplete = [f'#{r.checkin.seq} {r.checkin.logged_as}' for r in rows if r.checkin.incomplete]
+    if incomplete:
+        raise adif.ExportValidationError(
+            f'Check-in {", ".join(incomplete)}: fill in the missing callsign characters before exporting')
     records = []
     for row in rows:
         ci, op = row.checkin, row.operator

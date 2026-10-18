@@ -116,6 +116,11 @@ class CheckIn:
     def from_row(cls, row: sqlite3.Row) -> CheckIn:
         return _from_row(cls, row)
 
+    @property
+    def incomplete(self) -> bool:
+        """Logged with "?" for a character still to be filled in."""
+        return "?" in self.callsign
+
 
 @dataclass
 class CheckInRow:
@@ -128,4 +133,4 @@ class CheckInRow:
 
     @property
     def is_new(self) -> bool:
-        return self.nth == 1
+        return self.nth == 1 and not self.checkin.incomplete

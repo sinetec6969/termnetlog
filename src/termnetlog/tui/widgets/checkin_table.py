@@ -119,7 +119,7 @@ class CheckinTable(DataTable):
             cells = (
                 Text(str(ci.seq), justify="right"),
                 fmt.clock(ci.time_utc),
-                Text(ci.logged_as, style="bold"),
+                Text(ci.logged_as, style="bold magenta" if ci.incomplete else "bold"),
                 op.display_name,
                 *([] if self.compact else [op.location]),
                 flag_cell(row),

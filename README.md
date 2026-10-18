@@ -119,6 +119,7 @@ Entry line syntax: `CALL [flags] [via RELAY] [note…]`
 w1aw                       plain check-in
 k9xyz/m t r                mobile, has traffic, staying for the ragchew
 n0call via w1aw weak       relayed by W1AW, note "weak"
+w1a? weak                  missed the last letter; fix it later with F3
 ```
 
 Flags: **t** traffic · **s** short time · **r** ragchew · **c** recognized · **m** mobile · **p** portable · **e** EchoLink
@@ -194,6 +195,14 @@ check-in changes: time, sequence, relay, flags, and entry note remain intact.
 Operator profiles and private notes stay attached to their original callsigns;
 unrelated attendance history is never moved. Mobile/portable flags are preserved
 even if the corrected callsign suffix changes; adjust them separately as needed.
+
+If you miss part of a callsign, type `?` for each character you didn't catch
+(`w1a?`, `k?xyz`). While you type, the suggestion line lists known callsigns
+that fit. The check-in is saved right away and shown in magenta, and the
+header counts it as incomplete. It isn't looked up and doesn't count as a first-time
+check-in. Press **F3** on it later to fill in the call. ADIF export
+refuses incomplete callsigns and names each one, so they can't slip
+into a log upload. Two placeholders that are exactly the same can't both be in one net.
 
 Use **Ctrl+D** to edit net name, frequency, band, mode, role, and NCS. Ended nets
 allow corrections, but new check-ins require **Ctrl+O** and confirmation to reopen.

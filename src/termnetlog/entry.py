@@ -5,6 +5,7 @@ Syntax:  CALL [flags...] [via RELAY] [note words...]
     w1aw                    plain check-in
     k9xyz/m t r             mobile, has traffic, staying for ragchew
     n0call via w1aw weak    relayed by W1AW, note "weak"
+    w1a? weak               a missed character, to correct later with F3
 
 Flag letters: t traffic, s short time, r ragchew, c recognized, m mobile, p portable, e EchoLink.
 """
@@ -39,7 +40,7 @@ def parse(text: str) -> Entry | None:
     tokens = text.split()
     if not tokens:
         return None
-    call = callsign.parse(tokens[0])
+    call = callsign.parse(tokens[0], allow_unknown=True)
     if call is None:
         return None
     entry = Entry(call=call)

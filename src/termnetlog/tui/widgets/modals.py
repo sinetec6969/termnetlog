@@ -229,6 +229,8 @@ HELP = """\
 
 Entry syntax: `CALL [flags] [via RELAY] [note…]`
 e.g. `k9xyz/m t r` or `n0call via w1aw weak signal`.
+Missed a character? Type **?** in its place (`w1a?`, `k?xyz`); suggestions show known calls that fit.
+The call is flagged incomplete until you fix it with **f3**.
 Flag letters: **t** traffic · **s** short time · **r** ragchew · **c** recognized · **m** mobile · **p** portable · **e** EchoLink
 
 ## Check-in list focused
@@ -253,7 +255,7 @@ Flag letters: **t** traffic · **s** short time · **r** ragchew · **c** recogn
 | **ctrl+b** | back to menu |
 | **ctrl+t** | toggle times between UTC and local (Eastern by default) |
 | **f2** | toggle operator card (replaces roster in narrow terminals) |
-| **f3** | correct selected check-in callsign, with confirmation |
+| **f3** | correct selected check-in callsign (fills in **?** placeholders), with confirmation |
 | **ctrl+d** | edit net details |
 | **ctrl+o** | reopen an ended net, with confirmation |
 | **ctrl+z** | undo last check-in removal (current application session) |

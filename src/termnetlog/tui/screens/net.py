@@ -33,7 +33,7 @@ class CallSuggester(Suggester):
         self.repo = repo
 
     async def get_suggestion(self, value: str) -> str | None:
-        if not value or " " in value:
+        if not value or " " in value or callsign.UNKNOWN in value:
             return None
         matches = self.repo.suggest_callsigns(value.upper(), limit=1)
         return matches[0].operator.callsign if matches else None
@@ -161,6 +161,9 @@ class NetScreen(Screen):
         traffic = sum(1 for r in self.rows if r.checkin.has_traffic)
         if traffic:
             t.append(f" · {traffic} traffic", style="red")
+        incomplete = sum(1 for r in self.rows if r.checkin.incomplete)
+        if incomplete:
+            t.append(f" · {incomplete} incomplete (f3)", style="bold magenta")
         self.query_one("#net-header", Static).update(t)
 
     def update_ragchew(self) -> None:
@@ -208,8 +211,8 @@ class NetScreen(Screen):
         if event.input.id != "call-input":
             return
         first = event.value.split()[0] if event.value.split() else ""
-        parsed = callsign.parse(first) if first else None
-        prefix = parsed.base if parsed else re.sub(r"[^A-Z0-9]", "", first.upper())
+        parsed = callsign.parse(first, allow_unknown=True) if first else None
+        prefix = parsed.base if parsed else re.sub(r"[^A-Z0-9?]", "", first.upper())
         suggest = self.query_one("#suggest", Static)
         matches = self.repo.suggest_callsigns(prefix, limit=6) if prefix else []
         if matches:
@@ -262,6 +265,8 @@ class NetScreen(Screen):
         event.input.value = ""
         self.preview_call = None
         self.refresh_all(select_id=ci.id)
+        if ci.incomplete:
+            self.notify(f"Logged {ci.logged_as}. Select it and press F3 to fill in the missing characters.")
         self.start_lookup(ci.callsign)
 
     # ---- lookups -----------------------------------------------------------
@@ -270,7 +275,7 @@ class NetScreen(Screen):
         self.app.report_lookup_worker_state(event)
 
     def start_lookup(self, call: str, force: bool = False) -> None:
-        if not self.app.lookup.providers:
+        if not self.app.lookup.providers or callsign.is_incomplete(call):
             return
         if call in self.pending:
             return
@@ -347,7 +352,7 @@ class NetScreen(Screen):
         def entered(value: str | None) -> None:
             if value is None:
                 return
-            call = callsign.parse(value.strip())
+            call = callsign.parse(value.strip(), allow_unknown=True)
             if call is None:
                 self.notify('Enter a valid callsign.', severity='error')
                 return
@@ -432,6 +437,9 @@ class NetScreen(Screen):
         row = self._require_row()
         if not row:
             return
+        if row.checkin.incomplete:
+            self.notify(f"{row.checkin.logged_as} is incomplete; press F3 to fill it in first", severity="warning")
+            return
         if row.operator.lookup_source == "manual":
             self.notify(f"{row.operator.callsign} was edited by hand; lookup skipped", severity="warning")
             return
@@ -514,6 +522,12 @@ class NetScreen(Screen):
                     f"Net ended with {len(self.rows)} check-ins. You can keep editing notes; ctrl+e to export.",
                     timeout=8,
                 )
+                incomplete = [r.checkin.logged_as for r in self.rows if r.checkin.incomplete]
+                if incomplete:
+                    self.notify(
+                        f"Still incomplete: {', '.join(incomplete)}. Use F3 to fill them in before exporting.",
+                        severity="warning", timeout=10,
+                    )
 
         self.app.push_screen(ConfirmModal("End the net now?"), done)
 

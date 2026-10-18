@@ -27,7 +27,7 @@ class Repo:
     def counts(self) -> tuple[int, int]:
         """(nets, operators)"""
         nets = self.conn.execute("SELECT COUNT(*) FROM nets").fetchone()[0]
-        ops = self.conn.execute("SELECT COUNT(*) FROM operators").fetchone()[0]
+        ops = self.conn.execute("SELECT COUNT(*) FROM operators WHERE instr(callsign, '?') = 0").fetchone()[0]
         return nets, ops
 
     # ---- operators ---------------------------------------------------------
@@ -112,8 +112,9 @@ class Repo:
             """
             SELECT o.*, COUNT(c.id) AS checkin_count, MAX(c.time_utc) AS last_seen, MIN(c.time_utc) AS first_seen
             FROM operators o LEFT JOIN checkins c ON c.callsign = o.callsign
-            WHERE o.callsign LIKE :q OR o.name LIKE :q OR o.nickname LIKE :q
-               OR o.city LIKE :q OR o.operator_notes LIKE :q
+            WHERE (o.callsign LIKE :q OR o.name LIKE :q OR o.nickname LIKE :q
+                   OR o.city LIKE :q OR o.operator_notes LIKE :q)
+              AND instr(o.callsign, '?') = 0
             GROUP BY o.callsign
             ORDER BY (o.callsign LIKE :prefix) DESC, checkin_count DESC, o.callsign
             LIMIT :limit
@@ -123,18 +124,19 @@ class Repo:
         return [self._summary(r) for r in rows]
 
     def suggest_callsigns(self, prefix: str, limit: int = 5) -> list[OperatorSummary]:
+        """Known calls starting with prefix; "?" matches any one character."""
         if not prefix:
             return []
         rows = self.conn.execute(
             """
             SELECT o.*, COUNT(c.id) AS checkin_count, MAX(c.time_utc) AS last_seen, MIN(c.time_utc) AS first_seen
             FROM operators o LEFT JOIN checkins c ON c.callsign = o.callsign
-            WHERE o.callsign LIKE ?
+            WHERE o.callsign LIKE ? AND instr(o.callsign, '?') = 0
             GROUP BY o.callsign
             ORDER BY checkin_count DESC, o.callsign
             LIMIT ?
             """,
-            (prefix.upper() + "%", limit),
+            (prefix.upper().replace("?", "_") + "%", limit),
         ).fetchall()
         return [self._summary(r) for r in rows]
 
@@ -303,6 +305,13 @@ class Repo:
                 raise DuplicateCheckIn(CheckIn.from_row(duplicate))
             self.conn.execute('UPDATE checkins SET callsign=?, logged_as=? WHERE id=?',
                               (call.base, call.raw, checkin_id))
+            if '?' in current.callsign:
+                # Drop the placeholder's empty profile once nothing uses it; keep anything typed into it.
+                self.conn.execute(
+                    "DELETE FROM operators WHERE callsign=? AND operator_notes='' AND lookup_source IS NULL"
+                    ' AND NOT EXISTS (SELECT 1 FROM checkins WHERE callsign=?)',
+                    (current.callsign, current.callsign),
+                )
             result = self.get_checkin(checkin_id)
             assert result is not None
             self.conn.execute('RELEASE SAVEPOINT correct_callsign')
@@ -398,6 +407,9 @@ class Repo:
         self.conn.execute('SAVEPOINT restore_checkin')
         try:
             self.conn.execute('UPDATE nets SET id=id WHERE id=?', (removed.net_id,))
+            # A placeholder's profile may have been dropped by a later correction.
+            self.conn.execute('INSERT OR IGNORE INTO operators (callsign, created_at) VALUES (?, ?)',
+                              (removed.callsign, to_iso(utcnow())))
             duplicate = self.conn.execute('SELECT * FROM checkins WHERE net_id=? AND callsign=?',
                                           (removed.net_id, removed.callsign)).fetchone()
             if duplicate:
